@@ -4,7 +4,7 @@ import { CONFIG } from './config.js';
 
 const W = CONFIG.world;
 
-export function drawHud(ctx, { viewH, depthMeters, fps, seed }) {
+export function drawHud(ctx, { depthMeters, fps, seed, state, chainCount }) {
   ctx.fillStyle = 'rgba(255, 240, 220, 0.9)';
   ctx.font = 'bold 16px system-ui, sans-serif';
   ctx.textAlign = 'left';
@@ -15,22 +15,53 @@ export function drawHud(ctx, { viewH, depthMeters, fps, seed }) {
   ctx.fillStyle = 'rgba(255, 240, 220, 0.55)';
   ctx.fillText(`${fps} fps`, W.width - W.wallThickness - 8, 20);
   ctx.fillText(`seed ${seed}`, W.width - W.wallThickness - 8, 32);
+  ctx.fillText(state, W.width - W.wallThickness - 8, 44);
+
+  if (chainCount > 1) {
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillStyle = '#ffd84a';
+    ctx.fillText(`CHAIN x${chainCount}`, W.wallThickness + 8, 44);
+  }
 }
 
+const CONTROLS = [
+  ['Hold left / right', 'steer'],
+  ['Hold both halves', 'ears (glide)'],
+  ['Swipe down + hold', 'dive · burrow on ledge'],
+  ['Steer into wall', 'wall drag · lift to jump'],
+  ['Lift in the gold zone', 'PERFECT'],
+];
+
 export function drawTitle(ctx, viewH) {
-  ctx.fillStyle = 'rgba(10, 6, 3, 0.6)';
+  ctx.fillStyle = 'rgba(10, 6, 3, 0.72)';
   ctx.fillRect(0, 0, W.width, viewH);
+  const y0 = viewH * 0.46;
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f2ebe2';
   ctx.font = 'bold 36px system-ui, sans-serif';
-  ctx.fillText('RABBIT HOLE', W.width / 2, viewH * 0.4);
+  ctx.fillText('RABBIT HOLE', W.width / 2, y0);
   ctx.font = '15px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(242, 235, 226, 0.8)';
-  ctx.fillText('Tap to drop', W.width / 2, viewH * 0.4 + 36);
+  ctx.fillStyle = 'rgba(242, 235, 226, 0.85)';
+  ctx.fillText('Tap to drop', W.width / 2, y0 + 36);
+
+  ctx.font = '12px system-ui, sans-serif';
+  CONTROLS.forEach(([input, action], i) => {
+    const y = y0 + 80 + i * 22;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(242, 235, 226, 0.55)';
+    ctx.fillText(input, W.width / 2 - 8, y);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = i === CONTROLS.length - 1 ? '#ffd84a' : 'rgba(242, 235, 226, 0.9)';
+    ctx.fillText(action, W.width / 2 + 8, y);
+  });
+
+  ctx.textAlign = 'center';
   ctx.font = '11px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(242, 235, 226, 0.5)';
-  ctx.fillText('Hold left / right half to steer', W.width / 2, viewH * 0.4 + 60);
-  ctx.fillText('Keyboard: ← → or A / D · R restarts', W.width / 2, viewH * 0.4 + 76);
+  ctx.fillStyle = 'rgba(242, 235, 226, 0.45)';
+  ctx.fillText('Chains: Drill · Parachute Snap · Soft Landing · Wall Burrow', W.width / 2, y0 + 80 + CONTROLS.length * 22 + 14);
+  ctx.fillText('Keys: ← → steer · Space ears · ↓ dive/burrow', W.width / 2, y0 + 80 + CONTROLS.length * 22 + 32);
+  ctx.fillText('↑ wall jump · R restart', W.width / 2, y0 + 80 + CONTROLS.length * 22 + 48);
 }
 
 // Faint touch-zone hints for the first few seconds of a run.

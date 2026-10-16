@@ -25,8 +25,10 @@ export class Camera {
 
   update(dt, player) {
     this.prevY = this.y;
-    const speedFrac = Math.max(0, Math.min(1, player.vy / CONFIG.player.terminalVelocity));
-    this.look += (speedFrac * C.lookAhead - this.look) * (1 - Math.exp(-C.lookAheadRate * dt));
+    const speedFrac = Math.max(0, Math.min(C.maxLookFrac, player.vy / CONFIG.player.terminalVelocity));
+    const maxLook = this.viewH * (C.anchor - C.minScreenY);
+    const want = Math.min(speedFrac * C.lookAhead, maxLook);
+    this.look += (want - this.look) * (1 - Math.exp(-C.lookAheadRate * dt));
     this.y += (this.target(player) - this.y) * (1 - Math.exp(-C.followRate * dt));
   }
 }

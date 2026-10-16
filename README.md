@@ -8,10 +8,10 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 
 ## Status & running locally
 
-- **Done:** M0 (scaffold, fixed-timestep loop, FPS counter) and M1 (falling, steering, walls, ledges, look-ahead camera, touch + keyboard). Not yet checked on a real phone.
+- **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves) and M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow). M2–M3 were tested in a mobile-emulated browser and a headless sim, but not yet on a real phone.
 - **Run locally:** `python3 -m http.server` in the repo root, then open `http://localhost:8000`. ES modules don't load from `file://`.
 - **Deploy:** Settings → Pages → *Deploy from a branch* → `main` / `(root)`. `.nojekyll` is included so files are served as-is.
-- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run.
+- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. The HUD shows the current move state, and `window.__game` exposes the player, level and camera in the console.
 
 ---
 
@@ -48,6 +48,16 @@ START → HOLD (limited duration) → RELEASE
 
 Perfect releases function like fighting-game cancel windows: they are the main way a chain continues cleanly.
 
+**Decisions made while building M2:**
+- **Per-move timers** for now (§11 is still open). A **timing bar** above the rabbit shows hold progress, with the perfect window drawn in gold.
+- **Cancelling:** starting a move while another is held ends the current one, graded like a release. So cancelling inside the perfect window counts as perfect. On keyboard, holding ↓ and then pressing Space in the gold zone gives Parachute Snap.
+- **Perfect release:** gives a flash, particles, a "PERFECT" label, a haptic buzz and 0.6 s of momentum carry (sideways speed from Ears, fall speed from Dive). The chain link window also grows from 0.2 s to 0.35 s.
+- **Timeout:** shows "TOO LONG", followed by 0.45 s of recovery with no moves and no steering.
+- **Wall drag:** starts automatically when steering into a wall in the air. Lifting the steering finger, swiping sideways, or pressing ↑ jumps. A wall jump keeps its sideways momentum until it reaches a wall or the ground ("jump flight").
+- **Burrow:** a slow dig through the ledge. Letting go before breaking through climbs back out. The perfect window opens right after you break through ("clean exit": a little extra speed). The hole stays in the ledge.
+- **Dive into the ground:** still holding Dive when you land turns into Burrow, which makes it a Drill.
+- **Hard landings:** impacts above `hardLandingSpeed` show "OOF" and shake the screen. Damage comes in M4.
+
 ---
 
 ## 3. Chains [DECIDED: chaining is core / PROPOSED: specific chains]
@@ -73,6 +83,14 @@ Rules of thumb:
 - **Momentum carries.** Speed entering a move affects what comes out of it.
 - Each named chain gets a first-time-per-run bonus to encourage experimentation.
 - Chains are data-driven (see §9) so new ones can be added without touching core physics.
+
+**How the M3 chains work (as built):**
+- **Linking:** a move links to the previous one if it starts within the link window after a release, or at any point during a wall jump's flight. The `CHAINS` table in `src/chains.js` lists each chain's sequence, its perfect-release requirement and its context flag. The first match wins. Effects live in `CHAIN_EFFECTS`.
+- **Wall Burrow:** after a wall jump, dive (or swipe down) into the *opposite* wall. The rabbit tunnels down inside the wall and passes behind any ledges there. On release it bursts back out sideways; a perfect release gives a stronger burst. This is a stand-in until real tunnels and hidden rooms arrive in M6. Swiping down on a wall outside this chain just dives.
+- **Drill:** extra layers = 1 per 140 u/s of impact speed above terminal velocity, up to 5. Each layer punched slows the rabbit a little.
+- **Parachute Snap:** stops the fall instantly. Its shockwave breaks **fragile ledges** (cracked, paler) within 320 u below. Fragile ledges were added early for this.
+- **Soft Landing:** same sequence as Parachute Snap, but chosen when ground is within 160 u below. It cuts the fall to a safe speed, so the landing isn't hard.
+- The HUD shows **CHAIN xN** while a chain is live, and the first use of each chain in a run shows **NEW!**. Points come in M5.
 
 ---
 
@@ -117,6 +135,8 @@ Portrait orientation, two thumbs. Moves are context-sensitive so there are only 
 | Steer into a wall on contact | Wall drag (automatic) |
 | Swipe away from wall, or lift | Wall jump |
 | Lift finger(s) | Release the current move (perfect timing = lift in window) |
+
+As built: a swipe is 24 CSS px within 0.22 s (`config.input`). A finger that swipes down stops steering and holds Dive/Burrow until it's lifted. Ears stay open while any steering finger is still down.
 
 Desktop fallback for testing: arrow keys / A-D to steer, Space = ears, S/Down = dive/burrow, W/Up = wall jump.
 

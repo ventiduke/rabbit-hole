@@ -6,6 +6,7 @@ import { Player } from './player.js';
 import { Camera } from './camera.js';
 import { LevelGenerator } from './level/generator.js';
 import { randomSeed } from './rng.js';
+import { Fx } from './fx.js';
 import { drawWorld } from './render.js';
 import { drawHud, drawTitle, drawTouchHints } from './ui.js';
 
@@ -14,11 +15,13 @@ const ctx = canvas.getContext('2d');
 const input = createInput(canvas);
 const STEP = 1 / CONFIG.loop.stepHz;
 
+// Debug handle for console tuning/tests.
 const params = new URLSearchParams(location.search);
 const fixedSeed = params.has('seed') ? Number(params.get('seed')) >>> 0 : null;
 
 const player = new Player();
 const camera = new Camera();
+const fx = new Fx();
 let level;
 let scene = 'title';  // 'title' | 'play'
 let runTime = 0;
@@ -39,25 +42,30 @@ function resize() {
 function newRun() {
   level = new LevelGenerator(fixedSeed ?? randomSeed());
   player.reset();
+  fx.reset();
   camera.snapTo(player);
   level.update(camera);
   runTime = 0;
 }
 
+let lastFrame = null; // latest input snapshot, for the touch hints
+
 function step(dt) {
-  const pressed = input.consumePress();
+  const frame = input.sample();
+  lastFrame = frame;
   if (scene === 'title') {
-    if (pressed) scene = 'play';
+    if (frame.pressed) scene = 'play';
     return;
   }
-  if (input.isDown('KeyR')) {
+  if (frame.restart) {
     newRun();
     return;
   }
   runTime += dt;
-  player.update(dt, input, level.ledges);
+  player.update(dt, frame, { level, fx });
   camera.update(dt, player);
   level.update(camera);
+  fx.update(dt);
 }
 
 // --- FPS counter (rendered frames per second, averaged over 0.5 s).
@@ -75,12 +83,14 @@ function render(alpha, frameDt) {
   }
 
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
-  drawWorld(ctx, { camera, player, ledges: level.ledges, alpha });
+  drawWorld(ctx, { camera, player, ledges: level.ledges, fx, alpha });
   const depthMeters = Math.max(0, Math.floor((player.y - CONFIG.player.startY) / CONFIG.world.unitsPerMeter));
-  drawHud(ctx, { viewH: camera.viewH, depthMeters, fps, seed: level.seed });
+  fx.drawOverlay(ctx, CONFIG.world.width, camera.viewH);
+  const chainLive = player.move || player.chains.isLinked(player.time, player.jumpFlight > 0);
+  drawHud(ctx, { depthMeters, fps, seed: level.seed, state: player.state, chainCount: chainLive ? player.chains.count : 0 });
 
   if (scene === 'title') drawTitle(ctx, camera.viewH);
-  else drawTouchHints(ctx, camera.viewH, Math.min(1, CONFIG.ui.hintSeconds - runTime), input);
+  else if (lastFrame) drawTouchHints(ctx, camera.viewH, Math.min(1, CONFIG.ui.hintSeconds - runTime), lastFrame);
 }
 
 // --- Fixed-timestep loop with interpolated rendering.
@@ -107,6 +117,8 @@ document.addEventListener('visibilitychange', () => {
   acc = 0;
 });
 window.addEventListener('resize', resize);
+
+window.__game = { player, camera, fx, get level() { return level; } };
 
 resize();
 newRun();

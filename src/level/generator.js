@@ -38,6 +38,24 @@ export class LevelGenerator {
       x = t + L.minHole + rng.next() * (inner - w - 2 * L.minHole);
       if (inner - w < 2 * L.minHole) x = t + L.minHole;
     }
-    return { x, y, w, h: L.thickness };
+    const fragile = y > L.firstY && rng.chance(L.fragileChance);
+    return { x, y, w, h: L.thickness, fragile };
+  }
+
+  // Cut a hole [x0, x1] out of a ledge (burrow / drill), keeping the pieces.
+  carve(ledge, x0, x1) {
+    const i = this.ledges.indexOf(ledge);
+    if (i < 0) return;
+    const pieces = [];
+    if (x0 - ledge.x >= L.minPiece) pieces.push({ ...ledge, w: x0 - ledge.x });
+    if (ledge.x + ledge.w - x1 >= L.minPiece) pieces.push({ ...ledge, x: x1, w: ledge.x + ledge.w - x1 });
+    this.ledges.splice(i, 1, ...pieces);
+  }
+
+  // Break every fragile ledge in [y, y + range]; returns the broken ledges.
+  shockwave(y, range) {
+    const broken = this.ledges.filter((l) => l.fragile && l.y >= y - 2 && l.y <= y + range);
+    this.ledges = this.ledges.filter((l) => !broken.includes(l));
+    return broken;
   }
 }
