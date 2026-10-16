@@ -4,24 +4,52 @@ import { CONFIG } from './config.js';
 
 const W = CONFIG.world;
 
-export function drawHud(ctx, { depthMeters, fps, seed, state, chainCount }) {
+export function drawHud(ctx, { depthMeters, fps, seed, state, chainCount, hp, maxHp, tier }) {
   ctx.fillStyle = 'rgba(255, 240, 220, 0.9)';
   ctx.font = 'bold 16px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(`${depthMeters} m`, W.wallThickness + 8, 26);
+
+  for (let i = 0; i < maxHp; i++) drawHeart(ctx, W.wallThickness + 14 + i * 20, 62, i < hp);
 
   ctx.font = '10px ui-monospace, monospace';
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(255, 240, 220, 0.55)';
   ctx.fillText(`${fps} fps`, W.width - W.wallThickness - 8, 20);
   ctx.fillText(`seed ${seed}`, W.width - W.wallThickness - 8, 32);
-  ctx.fillText(state, W.width - W.wallThickness - 8, 44);
+  ctx.fillText(`tier ${tier} · ${state}`, W.width - W.wallThickness - 8, 44);
 
   if (chainCount > 1) {
     ctx.textAlign = 'left';
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.fillStyle = '#ffd84a';
     ctx.fillText(`CHAIN x${chainCount}`, W.wallThickness + 8, 44);
+  }
+}
+
+function drawHeart(ctx, cx, cy, full) {
+  ctx.fillStyle = full ? '#ff5a6e' : 'rgba(255, 240, 220, 0.18)';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + 6);
+  ctx.bezierCurveTo(cx - 10, cy - 1, cx - 6, cy - 9, cx, cy - 4);
+  ctx.bezierCurveTo(cx + 6, cy - 9, cx + 10, cy - 1, cx, cy + 6);
+  ctx.fill();
+}
+
+export function drawGameOver(ctx, viewH, { depthMeters, canRetry }) {
+  ctx.fillStyle = 'rgba(10, 6, 3, 0.7)';
+  ctx.fillRect(0, 0, W.width, viewH);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ff6b5a';
+  ctx.font = 'bold 32px system-ui, sans-serif';
+  ctx.fillText('KNOCKED OUT', W.width / 2, viewH * 0.4);
+  ctx.fillStyle = '#f2ebe2';
+  ctx.font = 'bold 22px system-ui, sans-serif';
+  ctx.fillText(`${depthMeters} m`, W.width / 2, viewH * 0.4 + 40);
+  if (canRetry) {
+    ctx.font = '15px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(242, 235, 226, 0.8)';
+    ctx.fillText('Tap to dig again', W.width / 2, viewH * 0.4 + 80);
   }
 }
 

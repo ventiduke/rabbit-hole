@@ -2,6 +2,8 @@
 // the caller sets up the scale so the shaft width fills the canvas.
 
 import { CONFIG } from './config.js';
+import { drawSpikes, drawPad, drawHazards } from './entities/hazards.js';
+import { drawRockZones, drawRocks } from './entities/rockfall.js';
 
 const W = CONFIG.world;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -13,7 +15,7 @@ const hash = (n) => {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 };
 
-export function drawWorld(ctx, { camera, player, ledges, fx, alpha }) {
+export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   const camY = lerp(camera.prevY, camera.y, alpha);
   const viewH = camera.viewH;
   const shake = fx.shakeOffset;
@@ -52,13 +54,20 @@ export function drawWorld(ctx, { camera, player, ledges, fx, alpha }) {
     ctx.fillText(`${m * 10}m`, W.width / 2, m * markEvery - 4);
   }
 
-  for (const l of ledges) drawLedge(ctx, l);
+  for (const l of level.ledges) {
+    if (l.pad) drawPad(ctx, l, level.time);
+    else drawLedge(ctx, l);
+  }
+  drawHazards(ctx, level);
 
   // Wall burrowing happens behind the wall surface.
   const inWall = player.state === 'wallBurrow';
+  const blink = player.invuln > 0 && !player.dead && Math.floor(player.invuln * 12) % 2 === 0;
   if (inWall) drawRabbit(ctx, player, alpha);
   drawWalls(ctx, camY, viewH, inWall);
-  if (!inWall) drawRabbit(ctx, player, alpha);
+  drawRockZones(ctx, level);
+  if (!inWall && !blink) drawRabbit(ctx, player, alpha);
+  drawRocks(ctx, level, camY);
 
   fx.drawWorld(ctx);
 
@@ -74,6 +83,7 @@ function drawLedge(ctx, l) {
   ctx.fillRect(l.x, l.y, l.w, l.h);
   ctx.fillStyle = l.fragile ? '#9aa86a' : '#5f8f3e';
   ctx.fillRect(l.x, l.y, l.w, 4);
+  if (l.spikes) drawSpikes(ctx, l);
   if (!l.fragile) return;
   // Cracks.
   ctx.strokeStyle = 'rgba(30, 18, 10, 0.7)';
@@ -128,6 +138,7 @@ function drawRabbit(ctx, p, alpha) {
     ctx.rotate(-p.move.side * Math.PI / 2);
   }
   if (state === 'recover') ctx.rotate(Math.sin(p.time * 30) * 0.25);
+  if (state === 'dead') ctx.rotate(Math.PI);
   if (state === 'wall') {
     // Feet against the wall: lean toward it.
     ctx.translate(p.move.side * 2, 0);
@@ -139,8 +150,9 @@ function drawRabbit(ctx, p, alpha) {
   h *= 1 - sq;
   ctx.translate(0, (p.h - h) / 2);
 
-  const fur = state === 'recover' ? '#bdb3a8' : '#f2ebe2';
-  const earFur = state === 'recover' ? '#b0a69b' : '#e8ddd0';
+  const dim = state === 'recover' || state === 'dead';
+  const fur = dim ? '#bdb3a8' : '#f2ebe2';
+  const earFur = dim ? '#b0a69b' : '#e8ddd0';
 
   // Ears.
   ctx.fillStyle = earFur;

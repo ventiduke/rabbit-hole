@@ -15,6 +15,7 @@ const P = CONFIG.player;
 const M = CONFIG.moves;
 const C = CONFIG.chains;
 const W = CONFIG.world;
+const H = CONFIG.hazards;
 
 const approach = (v, target, delta) =>
   v < target ? Math.min(v + delta, target) : Math.max(v - delta, target);
@@ -51,11 +52,16 @@ export class Player {
     this.jumpFlight = 0;    // seconds a wall jump still counts as in flight
     this.lastJumpFrom = 0;  // wall side of the last wall jump
     this.softLanding = false;
+    this.padBounced = null; // pad we bounced off this step
+    this.hp = P.maxHp;
+    this.invuln = 0;
+    this.dead = false;
     this.chains = new ChainTracker();
   }
 
   // What the renderer and HUD show.
   get state() {
+    if (this.dead) return 'dead';
     if (this.recover > 0) return 'recover';
     if (this.move) return this.move.variant === 'basic' ? this.move.name : this.move.variant;
     return this.grounded ? 'ground' : 'fall';
@@ -73,6 +79,7 @@ export class Player {
     this.recover = Math.max(0, this.recover - dt);
     this.carry = Math.max(0, this.carry - dt);
     this.jumpFlight = Math.max(0, this.jumpFlight - dt);
+    this.invuln = Math.max(0, this.invuln - dt);
 
     this.handleInput(input, world);
     if (this.move) {
@@ -81,9 +88,33 @@ export class Player {
     }
 
     this.justLanded = 0;
+    this.padBounced = null;
     this.physics(dt, input, world);
     this.afterCollide(input, world);
     this.squash = Math.max(0, this.squash - dt * 5);
+  }
+
+  // ---------------------------------------------------------------- health
+
+  // Returns true if the hit landed. fromX: where the hit came from (null = straight up).
+  hurt(world, fromX) {
+    if (this.invuln > 0 || this.dead) return false;
+    this.hp--;
+    this.invuln = P.invulnTime;
+    if (this.move) this.endMove(world, 'context');
+    this.carry = 0;
+    this.softLanding = false;
+    const cx = this.x + this.w / 2;
+    if (fromX !== null) this.vx = (cx >= fromX ? 1 : -1) * P.hitKnock;
+    this.vy = P.hitBounce;
+    this.grounded = false;
+    if (this.hp <= 0) this.dead = true;
+    world.fx.hurt(this);
+    return true;
+  }
+
+  heal(n) {
+    this.hp = Math.min(P.maxHp, this.hp + n);
   }
 
   // ---------------------------------------------------------------- input
@@ -305,6 +336,11 @@ export class Player {
       if (!overlaps(this, l)) continue;
       if (this.vy > 0) {
         this.y = l.y - this.h;
+        if (l.pad) {
+          this.vy = H.padBounce;
+          this.padBounced = l;
+          continue;
+        }
         if (!wasGrounded) this.land(this.vy);
         this.grounded = true;
         this.groundLedge = l;
@@ -363,6 +399,13 @@ export class Player {
     this.y += this.vy * dt;
     for (const l of [...world.level.ledges]) {
       if (!overlaps(this, l)) continue;
+      if (l.pad) {
+        this.y = l.y - this.h;
+        this.vy = H.padBounce;
+        this.padBounced = l;
+        this.endMove(world, 'context');
+        return;
+      }
       if (m.charges > 0) {
         m.charges--;
         world.level.carve(l, this.x - 4, this.x + this.w + 4);
@@ -433,9 +476,13 @@ export class Player {
 
     if (this.justLanded && !drilled) {
       if (this.softLanding) world.fx.puff(this, 10);
-      else if (this.justLanded > P.hardLandingSpeed) world.fx.hardLanding(this);
+      else if (this.justLanded > P.hardLandingSpeed) {
+        world.fx.hardLanding(this);
+        this.hurt(world, null);
+      }
       else world.fx.puff(this, Math.round(this.justLanded / 60));
     }
     if (this.grounded) this.softLanding = false;
+    if (this.padBounced) world.fx.pad(this);
   }
 }

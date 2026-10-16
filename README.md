@@ -8,10 +8,10 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 
 ## Status & running locally
 
-- **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves) and M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow). M2–M3 were tested in a mobile-emulated browser and a headless sim, but not yet on a real phone.
+- **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow) and M4 (endless chunk-based level, hazards, health). M2–M4 were tested in a mobile-emulated browser and a headless sim, but not yet on a real phone.
 - **Run locally:** `python3 -m http.server` in the repo root, then open `http://localhost:8000`. ES modules don't load from `file://`.
 - **Deploy:** Settings → Pages → *Deploy from a branch* → `main` / `(root)`. `.nojekyll` is included so files are served as-is.
-- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. The HUD shows the current move state, and `window.__game` exposes the player, level and camera in the console.
+- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=rockWall` repeats a single chunk, which is handy when authoring chunks. The HUD shows the current tier and move state, and `window.__game` exposes the player, level and camera in the console.
 
 ---
 
@@ -105,6 +105,11 @@ Rules of thumb:
 
 **Health (proposed):** 3 hits, short invulnerability after each hit. Rare pickup (carrot) restores 1.
 
+**As built (M4):**
+- **Health:** 3 HP and 1.3 s of blinking invulnerability after each hit. A hit also knocks you back, ends the current move and cancels momentum carry.
+- **Hard landings:** impacts above `hardLandingSpeed` (560 u/s) cost 1 HP. Baseline falling (340) is always safe. Releasing a Dive too late hurts unless you Drill (keep holding into the ledge) or Soft Landing.
+- **Game over:** at 0 HP you see a minimal "Knocked out" screen with your depth. Tap to retry. The full game-over and high-score screens come in M5.
+
 ---
 
 ## 5. Hazards & level elements [DECIDED list / PROPOSED interactions]
@@ -120,6 +125,14 @@ Rules of thumb:
 | Sideways sections | Level goes horizontal | Wall burrow, Ricochet, hidden tunnels behind walls (shortcuts / bonus rooms) |
 
 **Landing damage (proposed):** impact damage scales with vertical speed at contact; above a threshold it hurts unless the landing is part of a protective chain.
+
+**As built (M4):**
+- **Spiked ledges:** landing on one costs 1 HP and bounces you up and toward the ledge's nearest open edge, so you get thrown clear. Burrowing (Drill) goes through spikes safely. Close-call bonuses come with scoring in M5.
+- **Thorn balls ("harmful objects"):** some sit still and some patrol sideways. They patrol faster deeper down. Spear destroying them comes in M6.
+- **Rockfalls:** cracked patches on a wall. Rocks fall from above when you touch the patch, or, for `pass` patches, when you fall past its top. A blinking "▼ ! ▼" warns before they arrive. Rocks fall faster than baseline (430 u/s, more deeper down), so you outrun them with Dive or dodge out of their lane. They smash fragile ledges and shatter on anything else.
+- **Bouncers:** *up-pads* (pink mushrooms) are solid and launch you upward with no landing damage, and a drill that hits one bounces off. *Down-rings* (dashed blue) speed up your fall as you pass through. Diving through one is a **SPEED BURST** (1.3× dive speed plus momentum carry).
+- **Carrots:** restore 1 HP and are rare (12% of carrot slots).
+- Sideways sections are still M6.
 
 ---
 
@@ -152,6 +165,16 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 - Every chunk must be survivable from its entry with the baseline moves; harder chunks reward chains rather than require pixel-perfect play early on.
 - Chunks are recycled (spawn ahead, despawn behind) to keep memory flat for an infinite run.
 - Seeded RNG so a run can be replayed for debugging.
+
+**As built (M4):**
+- **Chunk data** lives in `src/level/chunks.js`: 16 chunks across tiers 0–3. Coordinates span the inner shaft (0–324).
+- **Entry and exit lanes:** the shaft is split into lanes L, C and R. Each chunk lists `entry` (lanes that are safe to fall into at the top) and `exit` (lanes you leave through). A chunk can follow another only if its entry covers the other's exit.
+- **Mirroring:** chunks are flipped left-to-right at random, so each one only needs authoring for one side.
+- **Optional hazards:** values like `spikes: 0.5` and `fragile: 0.3` are chances, scaled by difficulty; `true` means always. A `slot` is an optional thorn or carrot, filled by chance.
+- **Difficulty:** `d` goes from 0 to 1 by 1500 m. Tiers unlock at 0, 100, 300 and 650 m, and the newest unlocked tier is weighted 2.5× more likely. As `d` rises, so do optional-hazard chances, slot fill rate (20% → 75%), thorn patrol speed and rock speed, while the gap between chunks shrinks from 110 to 30 u. All of this is in `config.difficulty`.
+- **Randomness:** layout uses the seeded RNG. Runtime randomness, such as rock sizes and positions, uses a second RNG derived from the seed, so player behaviour never changes the layout.
+- **Recycling:** everything more than 300 u above the screen is removed. In a 6-minute soak test (2,000+ m) there were never more than about 13 ledges, 9 thorns and 13 rocks alive at once.
+- **Not yet:** narrow chimneys (needed for Ricochet) require wall-drag on solid blocks, so they wait for M6.
 
 ---
 

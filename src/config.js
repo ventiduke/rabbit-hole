@@ -32,7 +32,11 @@ export const CONFIG = {
     groundSteerAccel: 1400,
     groundSteerDecel: 1800,
     landSquashSpeed: 300,     // impact speed that gives a full squash
-    hardLandingSpeed: 560,    // impacts above this are "hard" (feedback only; damage in M4)
+    hardLandingSpeed: 560,    // impacts above this hurt (unless cushioned by a chain)
+    maxHp: 3,
+    invulnTime: 1.3,          // seconds of invulnerability after a hit
+    hitBounce: -220,          // vy after taking a hit
+    hitKnock: 180,            // vx away from what hit you
   },
 
   // Shared move lifecycle: START -> HOLD (maxHold) -> RELEASE.
@@ -115,19 +119,50 @@ export const CONFIG = {
     followRate: 10,       // vertical follow stiffness (1/s)
   },
 
+  level: {
+    firstY: 300,          // depth of the first chunk
+    spawnAhead: 400,      // generate chunks this far below the bottom of the screen
+    despawnBehind: 300,   // remove things this far above the top of the screen
+    laneWidth: 108,       // inner shaft split into lanes L / C / R for chunk connections
+  },
+
   ledges: {
-    firstY: 380,          // first ledge depth
-    gapMin: 170,          // vertical spacing between ledge rows
-    gapMax: 300,
-    widthMin: 70,
-    widthMax: 190,
     thickness: 14,
-    minHole: 64,          // narrowest passable opening next to a ledge
-    wallAttachedChance: 0.65,
-    fragileChance: 0.25,
+    padThickness: 10,
     minPiece: 10,         // carved pieces narrower than this disappear
-    spawnAhead: 300,      // generate this far below the bottom of the screen
-    despawnBehind: 300,   // remove this far above the top of the screen
+  },
+
+  // Difficulty d goes 0 -> 1 with depth; [a, b] pairs are lerped by d.
+  difficulty: {
+    maxDepth: 1500,             // meters at which d reaches 1
+    tierDepths: [0, 100, 300, 650], // meters at which chunk tiers 0..3 unlock
+    newestTierWeight: 2.5,      // chunks of the highest unlocked tier are this much more likely
+    hazardScale: [0.5, 1.3],    // multiplies optional spike/fragile chances in chunks
+    slotChance: [0.2, 0.75],    // chance an optional hazard slot gets filled
+    carrotChance: 0.12,         // chance a carrot slot gets a carrot
+    chunkGap: [110, 30],        // empty space between chunks
+    thornSpeed: [1, 1.7],       // patrol speed multiplier
+    rockSpeed: [1, 1.35],
+  },
+
+  hazards: {
+    thornRadius: 10,
+    spikeBounce: -380,          // vy when bounced off spikes
+    spikeKnock: 170,            // vx toward the nearest ledge edge
+    spikeKnockCarry: 0.8,       // seconds the knock keeps its momentum
+    padBounce: -480,            // up-bouncer launch speed
+    ringBoost: 520,             // down-ring sets fall speed to at least this
+    ringDiveMult: 1.3,          // diving through a ring: dive speed x this (speed burst)
+    carrotHeal: 1,
+    rock: {
+      size: [16, 26],
+      gravity: 900,
+      maxSpeed: 430,            // faster than baseline fall: dive or dodge
+      count: [3, 5],
+      stagger: 0.28,            // seconds between rocks
+      warn: 0.6,                // warning before the first rock
+      lane: 110,                // rocks fall within this far of their wall
+    },
   },
 
   input: {
@@ -141,6 +176,7 @@ export const CONFIG = {
     chainFlash: 0.35,
     chainShake: 5,
     hardLandingShake: 7,
+    hitShake: 8,
     shakeDecay: 30,       // shake units lost per second
     flashDecay: 2.5,      // flash alpha lost per second
     textLife: 0.9,
@@ -151,5 +187,6 @@ export const CONFIG = {
 
   ui: {
     hintSeconds: 4,       // how long touch-zone hints show after starting
+    retryDelay: 0.8,      // seconds before a tap on the game-over screen restarts
   },
 };

@@ -4,11 +4,13 @@ import { CONFIG } from './config.js';
 import { createInput } from './input.js';
 import { Player } from './player.js';
 import { Camera } from './camera.js';
-import { LevelGenerator } from './level/generator.js';
+import { LevelGenerator, tierAt } from './level/generator.js';
+import { interactHazards } from './entities/hazards.js';
+import { updateRockfall } from './entities/rockfall.js';
 import { randomSeed } from './rng.js';
 import { Fx } from './fx.js';
 import { drawWorld } from './render.js';
-import { drawHud, drawTitle, drawTouchHints } from './ui.js';
+import { drawHud, drawTitle, drawTouchHints, drawGameOver } from './ui.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -18,12 +20,14 @@ const STEP = 1 / CONFIG.loop.stepHz;
 // Debug handle for console tuning/tests.
 const params = new URLSearchParams(location.search);
 const fixedSeed = params.has('seed') ? Number(params.get('seed')) >>> 0 : null;
+const forceChunk = params.get('chunk'); // repeat one chunk, e.g. ?chunk=rockWall
 
 const player = new Player();
 const camera = new Camera();
 const fx = new Fx();
 let level;
-let scene = 'title';  // 'title' | 'play'
+let scene = 'title';  // 'title' | 'play' | 'over'
+let overTime = 0;
 let runTime = 0;
 let scale = 1;        // device pixels per world unit
 
@@ -40,11 +44,11 @@ function resize() {
 }
 
 function newRun() {
-  level = new LevelGenerator(fixedSeed ?? randomSeed());
+  level = new LevelGenerator(fixedSeed ?? randomSeed(), forceChunk);
   player.reset();
   fx.reset();
   camera.snapTo(player);
-  level.update(camera);
+  level.update(0, camera);
   runTime = 0;
 }
 
@@ -57,15 +61,27 @@ function step(dt) {
     if (frame.pressed) scene = 'play';
     return;
   }
-  if (frame.restart) {
+  if (frame.restart || (scene === 'over' && frame.pressed && overTime > CONFIG.ui.retryDelay)) {
     newRun();
+    scene = 'play';
+    return;
+  }
+  fx.update(dt);
+  if (scene === 'over') {
+    overTime += dt;
     return;
   }
   runTime += dt;
-  player.update(dt, frame, { level, fx });
+  const world = { level, fx };
+  player.update(dt, frame, world);
+  interactHazards(player, world);
+  updateRockfall(dt, player, world, camera);
   camera.update(dt, player);
-  level.update(camera);
-  fx.update(dt);
+  level.update(dt, camera);
+  if (player.dead) {
+    scene = 'over';
+    overTime = 0;
+  }
 }
 
 // --- FPS counter (rendered frames per second, averaged over 0.5 s).
@@ -83,13 +99,18 @@ function render(alpha, frameDt) {
   }
 
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
-  drawWorld(ctx, { camera, player, ledges: level.ledges, fx, alpha });
+  drawWorld(ctx, { camera, player, level, fx, alpha: scene === 'over' ? 1 : alpha });
   const depthMeters = Math.max(0, Math.floor((player.y - CONFIG.player.startY) / CONFIG.world.unitsPerMeter));
   fx.drawOverlay(ctx, CONFIG.world.width, camera.viewH);
   const chainLive = player.move || player.chains.isLinked(player.time, player.jumpFlight > 0);
-  drawHud(ctx, { depthMeters, fps, seed: level.seed, state: player.state, chainCount: chainLive ? player.chains.count : 0 });
+  drawHud(ctx, {
+    depthMeters, fps, seed: level.seed, state: player.state,
+    chainCount: chainLive ? player.chains.count : 0,
+    hp: player.hp, maxHp: CONFIG.player.maxHp, tier: tierAt(player.y),
+  });
 
   if (scene === 'title') drawTitle(ctx, camera.viewH);
+  else if (scene === 'over') drawGameOver(ctx, camera.viewH, { depthMeters, canRetry: overTime > CONFIG.ui.retryDelay });
   else if (lastFrame) drawTouchHints(ctx, camera.viewH, Math.min(1, CONFIG.ui.hintSeconds - runTime), lastFrame);
 }
 

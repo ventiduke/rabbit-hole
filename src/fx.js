@@ -95,11 +95,22 @@ export class Fx {
   }
 
   hardLanding(player) {
-    this.text('OOF', '#ff6b5a', 15);
+    this.text('HARD LANDING', '#ff6b5a', 12);
     this.puff(player, 14);
     this.shake(F.hardLandingShake);
-    this.flashScreen(0.18, '#ff6b5a');
+  }
+
+  hurt(player) {
+    this.text(player.hp > 0 ? 'OUCH' : 'KO', '#ff6b5a', 15);
+    this.burst(player.x + player.w / 2, player.y + player.h / 2, { count: 14, color: '#ff6b5a', speed: 160, life: 0.4, g: 0 });
+    this.shake(F.hitShake);
+    this.flashScreen(0.3, '#ff3b2f');
     this.haptic(F.hapticHit);
+  }
+
+  pad(player) {
+    this.burst(player.x + player.w / 2, player.y + player.h, { count: 10, color: '#ffd1e3', speed: 130, life: 0.35, g: 300 });
+    this.haptic(10);
   }
 
   puff(player, count) {
