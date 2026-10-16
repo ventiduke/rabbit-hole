@@ -185,8 +185,30 @@ export const CONFIG = {
     hapticHit: 40,
   },
 
+  // Every bonus is multiplied by the combo multiplier.
+  score: {
+    perMeter: 10,             // base points per meter of new depth
+    perfect: 50,
+    perfectMult: 0.25,        // multiplier gained per perfect release
+    chainMult: 0.5,           // multiplier gained per chain, x (chain length - 1)
+    chainLengthBonus: 50,     // extra points per move in the chain
+    firstChainBonus: 500,     // first use of each chain per run
+    closeCall: 100,
+    closeCallMult: 0.1,
+    closeCallMargin: 14,      // a hazard within this many units counts as a close call
+    destroy: 25,              // per ledge broken (Drill, Parachute Snap)
+    cleanEscape: 200,         // every rock of a rockfall missed you
+    speedBurst: 50,
+    carrot: 100,
+    maxMult: 8,
+    multHold: 4,              // seconds after the last boost before the multiplier decays
+    multDecay: 0.5,           // multiplier lost per second once decaying
+    storageKey: 'rabbit-hole.best',
+  },
+
   ui: {
     hintSeconds: 4,       // how long touch-zone hints show after starting
-    retryDelay: 0.8,      // seconds before a tap on the game-over screen restarts
+    retryDelay: 0.5,      // seconds before a tap on the game-over screen restarts
+    popupLife: 1.4,       // seconds a score popup stays under the score
   },
 };

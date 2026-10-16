@@ -51,6 +51,7 @@ export function updateRockfall(dt, player, world, camera) {
       break;
     }
     if (!r.dead && !hidden && !player.dead && overlaps(r, player)) {
+      r.zone.playerHit = true; // no clean escape, even if invulnerable
       if (player.hurt(world, r.x + r.w / 2)) r.dead = true;
     }
     if (r.y > camera.y + camera.viewH + 600) r.dead = true;

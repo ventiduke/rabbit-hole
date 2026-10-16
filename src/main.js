@@ -9,8 +9,9 @@ import { interactHazards } from './entities/hazards.js';
 import { updateRockfall } from './entities/rockfall.js';
 import { randomSeed } from './rng.js';
 import { Fx } from './fx.js';
+import { Score } from './score.js';
 import { drawWorld } from './render.js';
-import { drawHud, drawTitle, drawTouchHints, drawGameOver } from './ui.js';
+import { drawHud, drawDebug, drawTitle, drawTouchHints, drawGameOver } from './ui.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -21,13 +22,16 @@ const STEP = 1 / CONFIG.loop.stepHz;
 const params = new URLSearchParams(location.search);
 const fixedSeed = params.has('seed') ? Number(params.get('seed')) >>> 0 : null;
 const forceChunk = params.get('chunk'); // repeat one chunk, e.g. ?chunk=rockWall
+const debug = params.has('debug');      // fps / seed / tier / state readout
 
 const player = new Player();
 const camera = new Camera();
 const fx = new Fx();
+const score = new Score();
 let level;
 let scene = 'title';  // 'title' | 'play' | 'over'
 let overTime = 0;
+let isBest = false;
 let runTime = 0;
 let scale = 1;        // device pixels per world unit
 
@@ -47,6 +51,7 @@ function newRun() {
   level = new LevelGenerator(fixedSeed ?? randomSeed(), forceChunk);
   player.reset();
   fx.reset();
+  score.reset();
   camera.snapTo(player);
   level.update(0, camera);
   runTime = 0;
@@ -72,15 +77,17 @@ function step(dt) {
     return;
   }
   runTime += dt;
-  const world = { level, fx };
+  const world = { level, fx, score };
   player.update(dt, frame, world);
   interactHazards(player, world);
   updateRockfall(dt, player, world, camera);
+  score.update(dt, player, world);
   camera.update(dt, player);
   level.update(dt, camera);
   if (player.dead) {
     scene = 'over';
     overTime = 0;
+    isBest = score.finish();
   }
 }
 
@@ -103,14 +110,16 @@ function render(alpha, frameDt) {
   const depthMeters = Math.max(0, Math.floor((player.y - CONFIG.player.startY) / CONFIG.world.unitsPerMeter));
   fx.drawOverlay(ctx, CONFIG.world.width, camera.viewH);
   const chainLive = player.move || player.chains.isLinked(player.time, player.jumpFlight > 0);
-  drawHud(ctx, {
-    depthMeters, fps, seed: level.seed, state: player.state,
-    chainCount: chainLive ? player.chains.count : 0,
-    hp: player.hp, maxHp: CONFIG.player.maxHp, tier: tierAt(player.y),
-  });
+  if (scene === 'play') {
+    drawHud(ctx, {
+      score, depthMeters, hp: player.hp, maxHp: CONFIG.player.maxHp,
+      chainCount: chainLive ? player.chains.count : 0,
+    });
+  }
+  if (debug) drawDebug(ctx, camera.viewH, { fps, seed: level.seed, tier: tierAt(player.y), state: player.state });
 
-  if (scene === 'title') drawTitle(ctx, camera.viewH);
-  else if (scene === 'over') drawGameOver(ctx, camera.viewH, { depthMeters, canRetry: overTime > CONFIG.ui.retryDelay });
+  if (scene === 'title') drawTitle(ctx, camera.viewH, score.best);
+  else if (scene === 'over') drawGameOver(ctx, camera.viewH, { score, isBest, canRetry: overTime > CONFIG.ui.retryDelay, time: overTime });
   else if (lastFrame) drawTouchHints(ctx, camera.viewH, Math.min(1, CONFIG.ui.hintSeconds - runTime), lastFrame);
 }
 
@@ -139,7 +148,7 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('resize', resize);
 
-window.__game = { player, camera, fx, get level() { return level; } };
+window.__game = { player, camera, fx, score, get level() { return level; } };
 
 resize();
 newRun();

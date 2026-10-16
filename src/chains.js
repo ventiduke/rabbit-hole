@@ -14,11 +14,12 @@ const M = CONFIG.moves;
 //            'wallJump' is recorded when a wall drag releases into a jump.
 // perfect  — every earlier step must have been released perfectly.
 // context  — a flag from Player.context() that must be true.
+// points   — base score bonus (x combo multiplier).
 export const CHAINS = [
-  { id: 'wallBurrow', name: 'Wall Burrow', seq: ['wallJump', 'burrow'], context: 'onOppositeWall', effect: 'wallBurrow', color: '#7fd1ff' },
-  { id: 'drill', name: 'Drill', seq: ['dive', 'burrow'], context: 'onGround', effect: 'drill', color: '#ffb347' },
-  { id: 'softLanding', name: 'Soft Landing', seq: ['dive', 'ears'], perfect: true, context: 'nearGround', effect: 'softLanding', color: '#9be37a' },
-  { id: 'parachuteSnap', name: 'Parachute Snap', seq: ['dive', 'ears'], perfect: true, effect: 'parachuteSnap', color: '#ff7ab8' },
+  { id: 'wallBurrow', points: 400, name: 'Wall Burrow', seq: ['wallJump', 'burrow'], context: 'onOppositeWall', effect: 'wallBurrow', color: '#7fd1ff' },
+  { id: 'drill', points: 250, name: 'Drill', seq: ['dive', 'burrow'], context: 'onGround', effect: 'drill', color: '#ffb347' },
+  { id: 'softLanding', points: 200, name: 'Soft Landing', seq: ['dive', 'ears'], perfect: true, context: 'nearGround', effect: 'softLanding', color: '#9be37a' },
+  { id: 'parachuteSnap', points: 300, name: 'Parachute Snap', seq: ['dive', 'ears'], perfect: true, effect: 'parachuteSnap', color: '#ff7ab8' },
 ];
 
 // Effects run right after the chained move starts.
@@ -54,6 +55,7 @@ export const CHAIN_EFFECTS = {
     const broken = world.level.shockwave(y, C.parachuteSnap.shockwaveRange);
     world.fx.shockwave(cx, y, C.parachuteSnap.shockwaveRange);
     for (const l of broken) world.fx.debris(l);
+    world.score?.destroy(broken.length);
   },
 };
 

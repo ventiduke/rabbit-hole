@@ -54,6 +54,7 @@ export function interactHazards(player, world) {
       player.vy = M.dive.speed * H.ringDiveMult;
       player.carry = M.carryTime;
       fx.text('SPEED BURST', '#7fe0ff', 13);
+      world.score?.bonus(CONFIG.score.speedBurst, 'SPEED BURST', '#7fe0ff');
       fx.shake(3);
       fx.haptic(15);
     } else {
@@ -66,6 +67,7 @@ export function interactHazards(player, world) {
     if (c.taken || !circleHitsBox(c, 12, player)) continue;
     c.taken = true;
     player.heal(H.carrotHeal);
+    world.score?.bonus(CONFIG.score.carrot, 'CARROT', '#ff9a3c');
     fx.burst(c.x, c.y, { count: 14, color: '#ff9a3c', speed: 140, life: 0.5, g: 0 });
     fx.text(`+${H.carrotHeal} ♥`, '#ff9a3c', 14);
   }

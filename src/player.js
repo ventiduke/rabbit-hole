@@ -110,6 +110,7 @@ export class Player {
     this.grounded = false;
     if (this.hp <= 0) this.dead = true;
     world.fx.hurt(this);
+    world.score?.hit();
     return true;
   }
 
@@ -198,6 +199,7 @@ export class Player {
     if (chain) {
       CHAIN_EFFECTS[chain.effect]?.(this, world, chain);
       world.fx.chain(this, chain, isNew, this.chains.count);
+      world.score?.chain(chain, isNew, this.chains.count);
     }
   }
 
@@ -217,6 +219,7 @@ export class Player {
     if (quality === 'perfect') {
       this.carry = M.carryTime;
       world.fx.perfect(this);
+      world.score?.perfect();
     } else if (quality === 'timeout') {
       this.recover = M.recoveryTime;
       world.fx.timeout(this);
@@ -409,6 +412,7 @@ export class Player {
       if (m.charges > 0) {
         m.charges--;
         world.level.carve(l, this.x - 4, this.x + this.w + 4);
+        world.score?.destroy(1);
         this.vy *= C.drill.layerSlowdown;
         world.fx.dirt(this.x + this.w / 2, l.y, 16);
         world.fx.shake(2);

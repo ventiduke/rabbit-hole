@@ -8,10 +8,10 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 
 ## Status & running locally
 
-- **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow) and M4 (endless chunk-based level, hazards, health). M2–M4 were tested in a mobile-emulated browser and a headless sim, but not yet on a real phone.
+- **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow), M4 (endless chunk-based level, hazards, health) and M5 (scoring, combo multiplier, high score, start and game-over screens). M2–M5 were tested in a mobile-emulated browser and a headless sim, but not yet on a real phone.
 - **Run locally:** `python3 -m http.server` in the repo root, then open `http://localhost:8000`. ES modules don't load from `file://`.
 - **Deploy:** Settings → Pages → *Deploy from a branch* → `main` / `(root)`. `.nojekyll` is included so files are served as-is.
-- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=rockWall` repeats a single chunk, which is handy when authoring chunks. The HUD shows the current tier and move state, and `window.__game` exposes the player, level and camera in the console.
+- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=rockWall` repeats a single chunk, which is handy when authoring chunks. `?debug` shows FPS, seed, tier and move state. `window.__game` exposes the player, level, camera and score in the console.
 
 ---
 
@@ -102,6 +102,20 @@ Rules of thumb:
 - Base points for distance traveled.
 - **Combo multiplier:** grows with chain length and perfect releases; resets on taking a hit or a bad landing.
 - Bonus points: named chains (extra on first use per run), close calls (skimming hazards), hazard destruction, clean escapes from rockfalls.
+
+**Scoring as built (M5):** all numbers are in `config.score`, and every bonus is multiplied by the combo multiplier.
+- **Distance:** 10 points per meter of new depth.
+- **Multiplier:** +0.25 per perfect release, +0.5 × (chain length − 1) per named chain and +0.1 per close call, capped at x8. After 4 s without a boost it decays at 0.5/s back toward x1, and the HUD bar under the multiplier shows the time left. Any hit (including a hard landing) resets it to x1.
+- **Bonuses:**
+  - Perfect release: 50.
+  - Chain: its `points` (in the `CHAINS` table, 200–400) + 50 per move in the chain, plus 500 the first time you use that chain in a run.
+  - Close call (a thorn or rock within 14 u that misses you) and **SKIM** (passing just above spikes without landing): 100.
+  - SMASH: 25 per ledge broken by Drill or Parachute Snap.
+  - CLEAN ESCAPE: 200 when every rock of a rockfall falls past you without a hit.
+  - Speed burst: 50. Carrot: 100.
+- **High score:** best score and best depth are saved in `localStorage`. If storage is blocked they just don't persist.
+- **Screens:** the start screen shows your best. The game-over screen shows score, NEW BEST, and the run's depth, max combo, chains, perfects and close calls. Tap after 0.5 s to dig again, or press **R** at any time.
+- **HUD:** hearts, score with the multiplier and its bar, depth, recent bonuses and the chain counter. FPS moved behind `?debug`.
 
 **Health (proposed):** 3 hits, short invulnerability after each hit. Rare pickup (carrot) restores 1.
 
