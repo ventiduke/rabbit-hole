@@ -5,7 +5,7 @@
 // CHAINS plus, if needed, an effect in CHAIN_EFFECTS.
 
 import { CONFIG } from './config.js';
-import { DIG_RULES } from './level/tiles.js';
+import { LEDGE_T } from './level/world.js';
 
 const C = CONFIG.chains;
 const M = CONFIG.moves;
@@ -26,12 +26,10 @@ export const CHAINS = [
 // Effects run right after the chained move starts.
 export const CHAIN_EFFECTS = {
   // Tunnel sideways through the wall (dirt too; only rock stops it).
+  // The slot is already cut by Player.startTunnel.
   wallBurrow(player) {
     const m = player.move;
     m.variant = 'wallBurrow';
-    m.side = player.touchWall;
-    m.rule = DIG_RULES.drill;
-    m.speed = C.wallBurrow.speed;
     m.maxHold = C.wallBurrow.maxHold;
     m.window = null; // opens when you break through
   },
@@ -56,9 +54,10 @@ export const CHAIN_EFFECTS = {
     player.vy = 0;
     const cx = player.x + player.w / 2;
     const y = player.y + player.h;
-    const broken = world.level.shockwave(cx, y, C.parachuteSnap.shockwaveRange);
-    world.fx.shockwave(cx, y, C.parachuteSnap.shockwaveRange);
-    for (const l of broken) world.fx.debris(l);
+    const P = C.parachuteSnap;
+    const broken = world.level.shockwave(cx, y, P.shockwaveRange, P.shockwaveWidth);
+    world.fx.shockwave(cx, y, P.shockwaveRange);
+    for (const l of broken) world.fx.debris({ x: l.x1, y: Math.min(l.y1, l.y2), w: l.x2 - l.x1, h: LEDGE_T });
     world.score?.destroy(broken.length);
   },
 };

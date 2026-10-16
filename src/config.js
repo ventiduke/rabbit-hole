@@ -4,11 +4,12 @@
 
 export const CONFIG = {
   world: {
-    width: 360,           // world width; the screen always shows the full width
-    tile: 18,             // terrain tile size (20 tiles across)
-    wallThickness: 18,    // the unbreakable border column (also the HUD margin)
+    width: 1000,          // world width; the screen always shows the full width (landscape)
+    wallThickness: 24,    // side walls (also the HUD margin)
+    ledgeThickness: 12,   // how thick ledges are drawn (they collide along their top)
     unitsPerMeter: 24,    // for the depth readout
-    maxAspect: 0.62,      // max width/height of the play area (portrait letterbox on desktop)
+    minAspect: 1.45,      // play area width/height is clamped to this range;
+    maxAspect: 2.3,       // narrower screens letterbox (portrait shows a rotate hint)
   },
 
   loop: {
@@ -24,21 +25,25 @@ export const CONFIG = {
     terminalVelocity: 340,    // u/s, baseline fall cap
     overspeedFallDecel: 1400, // how fast vy above the current cap bleeds off
     carryFallDecel: 220,      // ...while momentum carry is active (after a perfect release)
-    airSteerSpeed: 95,        // u/s, baseline drift is slow on purpose
-    airSteerAccel: 520,       // u/s^2
-    airSteerDecel: 380,       // u/s^2 when no input
+    airSteerSpeed: 210,       // u/s, baseline drift (the world is 1000 wide)
+    airSteerAccel: 900,       // u/s^2
+    airSteerDecel: 600,       // u/s^2 when no input
     momentumDrag: 50,          // horizontal decel during jump flight / momentum carry
     overspeedDecel: 260,      // steering with vx above the steer cap bleeds it at this rate
-    groundSteerSpeed: 160,    // u/s, running on the ground
-    groundSteerAccel: 1400,
-    groundSteerDecel: 1800,
+    groundSteerSpeed: 300,    // u/s, running on the ground
+    groundSteerAccel: 1800,
+    groundSteerDecel: 2000,
+    slideAccel: 1100,         // sloped ledges: downhill acceleration x sin(angle)
+    slideFriction: 120,       // sloped ledges: decel when not steering (low, so you slide)
+    slideMax: 620,            // top speed sliding down a ledge
+    landSlideConvert: 0.6,    // landing on a slope turns this much of the fall into sideways speed
     landSquashSpeed: 300,     // impact speed that gives a full squash
     hardLandingSpeed: 560,    // impacts above this hurt (unless cushioned by a chain)
-    jumpSpeed: 330,           // ground jump (~3.5 tiles high)
+    jumpSpeed: 360,           // ground jump (~72 u high)
     jumpCut: 0.45,            // releasing jump early multiplies upward speed by this
     coyoteTime: 0.09,         // can still jump this long after walking off an edge
     jumpBuffer: 0.12,         // a jump pressed this early before landing still happens
-    cornerNudge: 6,           // slide past a tile corner overlapping by this much instead of catching on it
+    cornerNudge: 6,           // slide past a block corner overlapping by this much instead of catching on it
     wallDropPush: 30,         // letting go of a wall pushes you off it this fast
     maxHp: 3,
     invulnTime: 1.3,          // seconds of invulnerability after a hit
@@ -59,7 +64,7 @@ export const CONFIG = {
       perfect: [0.85, 1.0],
       fallSpeed: 100,         // ~0.3x terminal
       brake: 1700,            // how hard ears slow the fall
-      steerSpeed: 240,        // ~2.5x air steer
+      steerSpeed: 520,        // ~2.5x air steer
       steerAccel: 1300,
     },
     dive: {
@@ -75,20 +80,20 @@ export const CONFIG = {
       minFallSpeed: -40,      // can grab once vy is above this
       fallSpeed: 135,         // ~0.4x terminal
       brake: 1800,
-      jumpVx: 330,
-      jumpVy: -170,
-      perfectJumpVx: 430,
-      perfectJumpVy: -250,
+      jumpVx: 420,
+      jumpVy: -200,
+      perfectJumpVx: 560,
+      perfectJumpVy: -280,
       jumpFlight: 1.4,        // max seconds a wall jump counts as "in flight" for chains
       timeoutPush: 60,        // slip away from the wall on timeout
     },
     burrow: {
       maxHold: 1.4,
-      digSpeed: 70,           // u/s down through soft dirt / ledges
-      tunnelSpeed: 140,       // u/s sideways through soft dirt
+      digSpeed: 90,           // u/s down through ledges / soft blocks
+      tunnelSpeed: 220,       // u/s sideways through soft blocks
       exitWindow: [0.04, 0.22],// perfect window, measured from the moment you break through
       perfectExitBoost: 160,  // dig down: extra downward speed on a clean exit
-      perfectBurstVx: 300,    // tunnel: sideways burst on a clean exit
+      perfectBurstVx: 480,    // tunnel: sideways burst on a clean exit
       burstVy: -120,
       exitCarry: 0.5,         // seconds a tunnel exit keeps its sideways momentum
     },
@@ -100,18 +105,19 @@ export const CONFIG = {
       maxHold: 1.2,
       perfect: [0.55, 0.7],
       minSpeed: 420,
-      speedPerLayer: 120,     // each 120 u/s above terminal = one more row of tiles
-      maxLayers: 6,
-      layerSlowdown: 0.9,     // speed multiplier per row punched
+      speedPerLayer: 140,     // each 140 u/s above terminal = one more ledge / block punched
+      maxLayers: 5,
+      layerSlowdown: 0.88,    // speed multiplier per layer punched
     },
     wallBurrow: {
       maxHold: 1.2,
-      speed: 260,             // sideways through anything but rock (dirt too)
-      perfectBurstVx: 400,
+      speed: 360,             // sideways through anything but rock (dirt too)
+      perfectBurstVx: 620,
       burstVy: -140,
     },
     parachuteSnap: {
-      shockwaveRange: 320,    // breaks fragile ledges this far below
+      shockwaveRange: 360,    // breaks fragile ledges this far below
+      shockwaveWidth: 260,    // ...and this far either side
     },
     softLanding: {
       range: 160,             // ground must be within this distance below
@@ -120,39 +126,39 @@ export const CONFIG = {
   },
 
   camera: {
-    anchor: 0.33,         // player sits at this fraction of screen height
-    lookAhead: 130,       // extra units shown below per terminal velocity of fall speed
+    anchor: 0.3,          // player sits at this fraction of screen height
+    lookAhead: 60,        // extra units shown below per terminal velocity of fall speed
     maxLookFrac: 2.5,     // look-ahead grows up to this many terminal velocities
-    minScreenY: 0.12,     // never push the player above this fraction of the screen
+    minScreenY: 0.1,      // never push the player above this fraction of the screen
     lookAheadRate: 3,     // how fast look-ahead eases in/out (1/s)
     followRate: 10,       // vertical follow stiffness (1/s)
   },
 
   level: {
-    startRows: 8,         // open rows above and below the start
-    spawnAhead: 400,      // generate chunks this far below the bottom of the screen
-    despawnBehind: 300,   // remove things this far above the top of the screen
-    runHeight: 3,         // rows in a connector's sideways tunnel
-    runThornMin: 7,       // connector runs at least this many tiles long can get a thorn
-    shockCols: 6,         // Parachute Snap breaks fragile tiles this many columns either side
+    startClear: 500,      // open fall before the first section
+    spawnAhead: 600,      // generate sections this far below the bottom of the screen
+    despawnBehind: 400,   // remove things this far above the top of the screen
+    minPiece: 14,         // carved ledge / block pieces smaller than this disappear
+    gapThornMin: 400,     // gaps at least this long can get a drifting thorn
   },
 
   // Difficulty d goes 0 -> 1 with depth; [a, b] pairs are lerped by d.
   difficulty: {
-    maxDepth: 1500,             // meters at which d reaches 1
-    tierDepths: [0, 100, 300, 650], // meters at which chunk tiers 0..3 unlock
+    maxDepth: 2500,             // meters at which d reaches 1
+    tierDepths: [0, 150, 450, 1000], // meters at which section tiers 0..3 unlock
     newestTierWeight: 2.5,      // chunks of the highest unlocked tier are this much more likely
     hazardScale: [0.5, 1.3],    // multiplies optional spike/fragile chances in chunks
     slotChance: [0.2, 0.75],    // chance an optional hazard slot gets filled
     carrotChance: 0.12,         // chance a carrot slot gets a carrot
-    connectorDrop: [3, 1],      // rows of straight drop before each connector tunnel
-    runThornChance: 0.6,        // x d: chance a long connector run gets a patrolling thorn
+    gap: [[520, 820], [300, 520]], // open falling between sections: [min, max] at d=0 -> d=1
+    gapThornChance: [0.05, 0.6],   // chance a long gap gets a drifting thorn
+    gapRingChance: 0.25,           // chance a gap gets a down-ring
     thornSpeed: [1, 1.7],       // patrol speed multiplier
     rockSpeed: [1, 1.35],
   },
 
   hazards: {
-    thornRadius: 10,
+    thornRadius: 12,
     spikeBounce: -300,          // vy when bounced off spikes
     spikeKnock: 190,            // vx toward the nearer end of the spike strip
     spikeKnockCarry: 0.8,       // seconds the knock keeps its momentum
@@ -167,8 +173,8 @@ export const CONFIG = {
       count: [3, 5],
       stagger: 0.28,            // seconds between rocks
       warn: 0.6,                // warning before the first rock
-      triggerCols: 4,           // fires when you pass beneath within this many columns
-      triggerRows: 22,          // ...and within this many rows below it
+      triggerMargin: 60,        // fires when you pass beneath (within this far of its sides)
+      triggerDepth: 500,        // ...and within this far below it
     },
   },
 

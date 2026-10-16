@@ -8,12 +8,13 @@
 // Starting a new move while one is held cancels the current one; the cancel is
 // graded like a release, so cancelling inside the perfect window is perfect.
 //
-// The world is tile terrain (level/tiles.js): solid tiles block from every
-// side, ledges are one-way platforms, and burrowing removes tiles.
+// The world is an open cavern (level/world.js): one-way ledges that are often
+// sloped (land on one and it slides you left or right, then launches you off
+// its end), and solid blocks. Burrowing carves holes in ledges and blocks.
 
 import { CONFIG } from './config.js';
 import { ChainTracker, CHAIN_EFFECTS } from './chains.js';
-import { T, TILE, isSolid, isWall, props, DIG_RULES } from './level/tiles.js';
+import { RULES, LEDGE_T, slope, surfaceY } from './level/world.js';
 
 const P = CONFIG.player;
 const M = CONFIG.moves;
@@ -40,7 +41,7 @@ export class Player {
     this.prevY = this.y;
     this.time = 0;
     this.grounded = false;
-    this.groundTypes = new Set(); // tile types under our feet
+    this.ground = null;     // { ledge } | { block } we're standing on
     this.touchWall = 0;     // -1 / 1 when pressed against a wall
     this.wallContact = 0;   // same, but only while steering into it
     this.lastSteer = { dir: 0, time: -1 };
@@ -77,6 +78,15 @@ export class Player {
     return !!(m?.window && m.t >= m.window[0] && m.t <= m.window[1]);
   }
 
+  // Kind of ledge we're standing on ('ledge' | 'fragile' | 'spikes'), 'block', or null.
+  get groundKind() {
+    return this.ground?.ledge?.kind ?? (this.ground?.block ? 'block' : null);
+  }
+
+  get groundSlope() {
+    return this.ground?.ledge ? slope(this.ground.ledge) : 0;
+  }
+
   update(dt, input, world) {
     this.prevX = this.x;
     this.prevY = this.y;
@@ -102,6 +112,11 @@ export class Player {
     this.squash = Math.max(0, this.squash - dt * 5);
   }
 
+  leaveGround() {
+    this.grounded = false;
+    this.ground = null;
+  }
+
   // ---------------------------------------------------------------- health
 
   // Returns true if the hit landed. fromX: where the hit came from (null = straight up).
@@ -115,7 +130,7 @@ export class Player {
     const cx = this.x + this.w / 2;
     if (fromX !== null) this.vx = (cx >= fromX ? 1 : -1) * P.hitKnock;
     this.vy = P.hitBounce;
-    this.grounded = false;
+    this.leaveGround();
     if (this.hp <= 0) this.dead = true;
     world.fx.hurt(this);
     world.score?.hit();
@@ -164,7 +179,7 @@ export class Player {
 
   groundJump(world) {
     this.vy = -P.jumpSpeed;
-    this.grounded = false;
+    this.leaveGround();
     this.coyote = 0;
     this.jumping = true;
     world.fx.puff(this, 5);
@@ -179,32 +194,32 @@ export class Player {
   }
 
   // Burrow picks its direction from context:
-  //   Wall Burrow chain (wall jump -> burrow into the opposite wall): sideways through anything but rock
-  //   pushing into a soft wall (wall drag or on the ground): tunnel sideways
-  //   standing on diggable ground: dig down (or Drill, as a chain)
+  //   Wall Burrow chain (wall jump -> burrow into the opposite wall): through any block but rock
+  //   pushing into a soft block (wall slide or on the ground): tunnel through it sideways
+  //   standing on a ledge or soft block: dig down through it (or Drill, as a chain)
   //   otherwise in the air: dive
   requestBurrow(world) {
     if (this.recover > 0 || this.move?.name === 'burrow') return;
-    const map = world.level.map;
+    const geo = world.level.world;
     const side = this.pushSide();
     if (this.move) this.endMove(world, 'cancel');
     const chain = this.chains.match('burrow', this.time, this.context(world));
 
-    if (chain?.id === 'wallBurrow') return this.startMove('burrow', chain, world);
-    const tunnelY = side ? this.tunnelY(map, side) : null;
-    if (tunnelY !== null) {
-      this.y = tunnelY;
-      return this.startMove('burrow', null, world, {
-        variant: 'tunnel', side, rule: DIG_RULES.tunnel, speed: M.burrow.tunnelSpeed, window: null,
-      });
+    if (chain?.id === 'wallBurrow') {
+      const b = this.sideBlock(geo, this.touchWall);
+      if (b && RULES.drill.block(b.kind)) return this.startTunnel(world, b, this.touchWall, chain);
+      return world.fx.clunk(this);
+    }
+    if (side) {
+      const b = this.sideBlock(geo, side);
+      if (b && RULES.tunnel.block(b.kind)) return this.startTunnel(world, b, side, null);
     }
     if (this.grounded) {
       if (chain?.id === 'drill') return this.startMove('burrow', chain, world);
-      if (this.probe(map, 0, DIG_RULES.dig)) {
-        return this.startMove('burrow', chain, world, { variant: 'dig', rule: DIG_RULES.dig, window: null });
-      }
-      world.fx.clunk(this);
-      return;
+      const g = this.ground;
+      const ok = g.ledge ? RULES.dig.ledge(g.ledge.kind) : RULES.dig.block(g.block.kind);
+      if (ok) return this.startDig(world, chain);
+      return world.fx.clunk(this);
     }
     this.request('dive', world);
   }
@@ -218,35 +233,40 @@ export class Player {
     return 0;
   }
 
-  // A height at which we can tunnel sideways into soft dirt: where we are, or
-  // snapped to the tile rows (so a mid-air wall drag doesn't catch a dirt corner).
-  tunnelY(map, side) {
-    const y0 = this.y;
-    const feet = Math.floor((this.y + this.h) / TILE);
-    const candidates = [y0, (feet + 1) * TILE - this.h, feet * TILE - this.h];
-    let found = null;
-    for (const y of candidates) {
-      this.y = y;
-      const ok = this.probe(map, side, DIG_RULES.tunnel) && !map.anyInBox(this.x, y, this.w, this.h, isWall);
-      if (ok && found === null) found = y;
-    }
-    this.y = y0;
-    return found;
+  // The block right next to us on `side` (side walls come back as rock).
+  sideBlock(geo, side) {
+    const hits = geo.blocksIn(side > 0 ? this.x + this.w : this.x - 2, this.y + 3, 2, this.h - 6);
+    const mid = this.y + this.h / 2;
+    return hits.find((b) => b.y <= mid && b.y + b.h >= mid) ?? hits[0] ?? null;
   }
 
-  // Is there something `rule` can burrow into next to us (side -1/1) or below (side 0)?
-  probe(map, side, rule) {
-    const box = side === 0
-      ? { x: this.x, y: this.y + this.h, w: this.w, h: 2 }
-      : { x: side > 0 ? this.x + this.w : this.x - 2, y: this.y + 1, w: 2, h: this.h - 2 };
-    let any = false;
-    let blocked = false;
-    map.forBox(box.x, box.y, box.w, box.h, (c, r, t) => {
-      if (!isSolid(t)) return;
-      if (rule(t)) any = true;
-      else blocked = true;
+  startTunnel(world, b, side, chain) {
+    // Cut a slot through the whole block at our height, then dig along it.
+    world.level.world.carveBlock(b, { x: b.x - 1, y: this.y - 3, w: b.w + 2, h: this.h + 6 });
+    world.fx.dirt(side > 0 ? this.x + this.w : this.x, this.y + this.h / 2, 12);
+    this.startMove('burrow', chain, world, {
+      variant: chain ? 'wallBurrow' : 'tunnel',
+      side,
+      edge: side > 0 ? b.x + b.w : b.x,
+      speed: M.burrow.tunnelSpeed,
+      window: null,
     });
-    return any && !blocked;
+  }
+
+  startDig(world, chain) {
+    const g = this.ground;
+    const geo = world.level.world;
+    let edge;
+    if (g.ledge) {
+      edge = surfaceY(g.ledge, this.x + this.w / 2) + LEDGE_T;
+      geo.carveLedge(g.ledge, this.x - 6, this.x + this.w + 6);
+    } else {
+      edge = g.block.y + g.block.h;
+      geo.carveBlock(g.block, { x: this.x - 4, y: g.block.y - 1, w: this.w + 8, h: g.block.h + 2 });
+    }
+    world.fx.dirt(this.x + this.w / 2, this.y + this.h, 10);
+    this.leaveGround();
+    this.startMove('burrow', chain, world, { variant: 'dig', edge, window: null });
   }
 
   context(world) {
@@ -254,22 +274,25 @@ export class Player {
       inJumpFlight: this.jumpFlight > 0,
       onGround: this.grounded,
       onOppositeWall: this.touchWall !== 0 && this.touchWall !== this.lastJumpFrom,
-      nearGround: !this.grounded && this.distanceToGround(world.level.map) < C.softLanding.range,
+      nearGround: !this.grounded && this.distanceToGround(world.level.world) < C.softLanding.range,
     };
   }
 
-  distanceToGround(map) {
-    const bottom = this.y + this.h;
-    const r0 = Math.floor(bottom / TILE);
-    const rows = Math.ceil(C.softLanding.range / TILE) + 1;
-    for (let r = r0; r <= r0 + rows; r++) {
-      let hit = false;
-      map.forBox(this.x, r * TILE, this.w, 1, (c, rr, t) => {
-        if (isSolid(t)) hit = true;
-      });
-      if (hit && r * TILE >= bottom - 0.5) return r * TILE - bottom;
+  distanceToGround(geo) {
+    const foot = this.y + this.h;
+    const cx = this.x + this.w / 2;
+    let best = Infinity;
+    for (const l of geo.ledges) {
+      if (cx < l.x1 || cx > l.x2) continue;
+      const d = surfaceY(l, cx) - foot;
+      if (d >= -1) best = Math.min(best, d);
     }
-    return Infinity;
+    for (const b of geo.blocks) {
+      if (b.x >= this.x + this.w || b.x + b.w <= this.x) continue;
+      const d = b.y - foot;
+      if (d >= -1) best = Math.min(best, d);
+    }
+    return best;
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -311,7 +334,7 @@ export class Player {
       else if (reason === 'release') this.vx = -m.side * P.wallDropPush; // let go: drop straight down
       else if (reason === 'timeout') this.vx = -m.side * M.wall.timeoutPush;
     }
-    if (m.name === 'burrow') this.exitBurrow(m, quality, world);
+    if (m.name === 'burrow') this.exitBurrow(m, quality);
 
     if (quality === 'perfect') {
       this.carry = M.carryTime;
@@ -337,8 +360,8 @@ export class Player {
     world.fx.wallKick(this, side);
   }
 
-  exitBurrow(m, quality, world) {
-    if (!m.broke) return; // let go inside the ground: you stay in the hole you dug
+  exitBurrow(m, quality) {
+    if (!m.broke) return; // let go inside: you stay in the hole you dug
     if (m.variant === 'dig' && quality === 'perfect') this.vy += M.burrow.perfectExitBoost;
     if ((m.variant === 'tunnel' || m.variant === 'wallBurrow') && quality === 'perfect') {
       const B = m.variant === 'wallBurrow' ? C.wallBurrow : M.burrow;
@@ -352,7 +375,6 @@ export class Player {
 
   physics(dt, input, world) {
     const m = this.move;
-    const map = world.level.map;
     if (m?.variant === 'drill') return this.drillPhysics(dt, world);
     if (m?.variant === 'dig' && !m.broke) return this.digPhysics(dt, world);
     if ((m?.variant === 'tunnel' || m?.variant === 'wallBurrow') && !m.broke) return this.tunnelPhysics(dt, world);
@@ -362,6 +384,8 @@ export class Player {
     const locked = this.recover > 0 || name === 'dive' || name === 'burrow';
     let steer = locked ? 0 : input.steer;
     if (name === 'wall') steer = m.side;
+    const s = this.groundSlope;
+    const sloped = Math.abs(s) > 0.05;
 
     let maxSpeed, accel, decel;
     if (name === 'ears') {
@@ -370,7 +394,7 @@ export class Player {
     } else if (this.grounded) {
       maxSpeed = P.groundSteerSpeed;
       accel = P.groundSteerAccel;
-      decel = P.groundSteerDecel;
+      decel = sloped ? P.slideFriction : P.groundSteerDecel; // slopes keep you sliding
     } else {
       maxSpeed = P.airSteerSpeed;
       accel = P.airSteerAccel;
@@ -382,12 +406,19 @@ export class Player {
 
     let rate;
     if (steer !== 0 && Math.sign(this.vx) === steer && Math.abs(this.vx) > maxSpeed) {
-      rate = carrying ? P.momentumDrag : P.overspeedDecel; // keep momentum, don't snap down
+      // Keep momentum instead of snapping down to the steer cap.
+      rate = carrying ? P.momentumDrag : this.grounded && sloped ? P.slideFriction : P.overspeedDecel;
     } else {
       rate = steer !== 0 ? accel : decel;
     }
     this.vx = approach(this.vx, steer * maxSpeed, rate * dt);
+    if (this.grounded && this.ground.ledge) {
+      // Sloped ledges pull you downhill.
+      this.vx += P.slideAccel * (s / Math.hypot(1, s)) * dt;
+      this.vx = Math.max(-P.slideMax, Math.min(P.slideMax, this.vx));
+    }
     if (steer !== 0 && name !== 'wall') this.facing = steer;
+    else if (this.grounded && Math.abs(this.vx) > 40) this.facing = Math.sign(this.vx);
 
     // --- Vertical: accelerate up to the current cap, brake down to it from above.
     let cap = P.terminalVelocity;
@@ -403,30 +434,48 @@ export class Player {
       cap = M.wall.fallSpeed;
       brake = M.wall.brake;
     }
-    this.vy = this.vy < cap ? Math.min(this.vy + gain * dt, cap) : approach(this.vy, cap, brake * dt);
+    if (this.grounded && this.ground.ledge) this.vy = 0; // riding a ledge
+    else this.vy = this.vy < cap ? Math.min(this.vy + gain * dt, cap) : approach(this.vy, cap, brake * dt);
 
-    this.moveAndCollide(dt, steer, map);
+    this.moveAndCollide(dt, steer, world.level.world);
   }
 
-  // Sub-stepped so nothing tunnels through a tile at dive speed.
-  moveAndCollide(dt, steer, map) {
-    this.unstick(map);
+  // Sub-stepped so nothing gets skipped at dive speed.
+  moveAndCollide(dt, steer, geo) {
+    this.unstick(geo);
     const wasGrounded = this.grounded;
-    this.grounded = false;
-    const n = Math.max(1, Math.ceil((Math.max(Math.abs(this.vx), Math.abs(this.vy)) * dt) / 8));
+    if (this.ground?.block) this.leaveGround(); // re-found by stepY while we stand on it
+    const n = Math.max(1, Math.ceil((Math.max(Math.abs(this.vx), Math.abs(this.vy)) * dt) / 6));
     for (let i = 0; i < n; i++) {
-      this.stepX((this.vx * dt) / n, map);
-      this.stepY((this.vy * dt) / n, map, wasGrounded);
+      if (this.ground?.ledge) this.slideStep(dt / n, geo);
+      else {
+        this.stepX((this.vx * dt) / n, geo);
+        this.stepY((this.vy * dt) / n, geo, wasGrounded);
+      }
     }
-    this.updateContacts(steer, map);
+    this.updateContacts(steer, geo);
   }
 
-  // Safety net: if we're ever inside a wall (e.g. after a snap or a carve),
-  // pop out to the nearest free spot.
-  unstick(map) {
-    const inside = (x, y) => map.anyInBox(x + 0.01, y + 0.01, this.w - 0.02, this.h - 0.02, isWall);
+  // Riding a ledge: follow its surface; run off an end and you launch along its slope.
+  slideStep(dt, geo) {
+    const l = this.ground.ledge;
+    if (!geo.ledges.includes(l)) return this.leaveGround(); // it broke under us
+    this.stepX(this.vx * dt, geo);
+    const cx = this.x + this.w / 2;
+    if (cx < l.x1 || cx > l.x2) {
+      this.leaveGround();
+      this.vy = Math.max(0, this.vx * slope(l));
+      return;
+    }
+    this.y = surfaceY(l, cx) - this.h;
+    this.grounded = true;
+  }
+
+  // Safety net: if we're ever inside a block, pop out to the nearest free spot.
+  unstick(geo) {
+    const inside = (x, y) => geo.solidAt(x + 0.01, y + 0.01, this.w - 0.02, this.h - 0.02);
     if (!inside(this.x, this.y)) return;
-    for (let d = 2; d <= TILE * 2; d += 2) {
+    for (let d = 2; d <= 48; d += 2) {
       for (const [dx, dy] of [[0, -d], [-d, 0], [d, 0], [0, d]]) {
         if (!inside(this.x + dx, this.y + dy)) {
           this.x += dx;
@@ -437,93 +486,87 @@ export class Player {
     }
   }
 
-  stepX(dx, map) {
+  stepX(dx, geo) {
     if (!dx) return;
     this.x += dx;
-    let edge = null;
-    map.forBox(this.x, this.y, this.w, this.h, (c, r, t) => {
-      if (!isWall(t)) return;
-      const e = dx > 0 ? c * TILE : (c + 1) * TILE;
-      edge = edge === null ? e : dx > 0 ? Math.min(edge, e) : Math.max(edge, e);
-    });
-    if (edge !== null) {
-      this.x = dx > 0 ? edge - this.w : edge;
-      this.vx = 0;
-    }
+    const hits = geo.blocksIn(this.x, this.y, this.w, this.h);
+    if (!hits.length) return;
+    this.x = dx > 0 ? Math.min(...hits.map((b) => b.x)) - this.w : Math.max(...hits.map((b) => b.x + b.w));
+    this.vx = 0;
   }
 
-  stepY(dy, map, wasGrounded) {
+  stepY(dy, geo, wasGrounded) {
     if (!dy) return;
-    const prevBottom = this.y + this.h;
+    const prevFoot = this.y + this.h;
     this.y += dy;
-    if (dy > 0) {
-      let top = null;
-      const cols = new Set();
-      map.forBox(this.x, this.y, this.w, this.h, (c, r, t) => {
-        if (!isSolid(t)) return;
-        if (props(t).oneWay && prevBottom > r * TILE + 0.01) return; // only from above
-        if (top === null || r * TILE < top) top = r * TILE;
-        cols.add(c);
-      });
-      if (top === null) return;
-      if (!wasGrounded && this.nudge(map, cols)) return; // slip past a corner into a gap
-      this.y = top - this.h;
-      if (this.feetOn(map, T.PAD)) {
-        this.vy = H.padBounce;
-        this.padBounced = true;
-        return;
-      }
-      if (!wasGrounded && !this.grounded) this.land(this.vy);
-      this.grounded = true;
-      this.vy = 0;
-    } else {
-      let bottom = null;
-      const cols = new Set();
-      map.forBox(this.x, this.y, this.w, this.h, (c, r, t) => {
-        if (!isWall(t)) return;
-        bottom = bottom === null ? (r + 1) * TILE : Math.max(bottom, (r + 1) * TILE);
-        cols.add(c);
-      });
-      if (bottom === null) return;
-      if (this.nudge(map, cols)) return; // jumped into a ceiling corner
-      this.y = bottom;
+    const hits = geo.blocksIn(this.x, this.y, this.w, this.h);
+    if (dy < 0) {
+      if (!hits.length) return;
+      if (this.nudge(geo, hits)) return; // jumped into a corner
+      this.y = Math.max(...hits.map((b) => b.y + b.h));
       this.vy = 0;
       this.jumping = false;
+      return;
     }
+
+    // Falling: the nearest block top or ledge surface we crossed.
+    let top = Infinity;
+    let ref = null;
+    for (const b of hits) {
+      if (b.y < top) {
+        top = b.y;
+        ref = { block: b };
+      }
+    }
+    const cx = this.x + this.w / 2;
+    for (const l of geo.ledges) {
+      if (cx < l.x1 || cx > l.x2) continue;
+      const sy = surfaceY(l, cx);
+      if (prevFoot <= sy + 0.5 && this.y + this.h >= sy && sy < top) {
+        top = sy;
+        ref = { ledge: l };
+      }
+    }
+    if (!ref) return;
+    if (ref.block && !wasGrounded && this.nudge(geo, hits)) return; // slip past a corner
+    this.y = top - this.h;
+
+    if (ref.ledge?.kind === 'pad') {
+      this.vy = H.padBounce;
+      this.padBounced = true;
+      return;
+    }
+    const s = ref.ledge ? slope(ref.ledge) : 0;
+    if (!wasGrounded && !this.grounded) {
+      // Hitting a slope at an angle softens the impact and turns some of the fall sideways.
+      this.land(this.vy / Math.hypot(1, s));
+      this.vx += this.vy * (s / (1 + s * s)) * P.landSlideConvert;
+    }
+    this.ground = ref;
+    this.grounded = true;
+    this.vy = 0;
   }
 
-  // Corner correction: if we only clip one tile column by a sliver, shift
-  // sideways instead of catching on it.
-  nudge(map, cols) {
-    if (cols.size !== 1) return false;
-    const c = [...cols][0];
-    const overlapLeft = (c + 1) * TILE - this.x;   // tile is on our left edge
-    const overlapRight = this.x + this.w - c * TILE; // tile is on our right edge
+  // Corner correction: if we only clip one block by a sliver at our side, shift instead.
+  nudge(geo, hits) {
+    if (hits.length !== 1 || hits[0].side) return false;
+    const b = hits[0];
+    const overlapLeft = b.x + b.w - this.x;      // block on our left edge
+    const overlapRight = this.x + this.w - b.x;  // block on our right edge
     let shift = 0;
     if (overlapLeft > 0 && overlapLeft <= P.cornerNudge) shift = overlapLeft;
     else if (overlapRight > 0 && overlapRight <= P.cornerNudge) shift = -overlapRight;
-    if (!shift) return false;
-    if (map.anyInBox(this.x + shift, this.y, this.w, this.h, isSolid)) return false;
+    if (!shift || geo.solidAt(this.x + shift, this.y, this.w, this.h)) return false;
     this.x += shift;
     return true;
   }
 
-  feetOn(map, type) {
-    return map.anyInBox(this.x, this.y + this.h, this.w, 1, (t) => t === type);
-  }
-
-  updateContacts(steer, map) {
-    const wallAt = (x) => map.anyInBox(x, this.y + 4, 1, this.h - 8, isWall);
-    const left = wallAt(this.x - 1);
-    const right = wallAt(this.x + this.w);
+  updateContacts(steer, geo) {
+    const wallAt = (x) => geo.solidAt(x, this.y + 4, 1, this.h - 8);
+    const left = wallAt(this.x - 1.5);
+    const right = wallAt(this.x + this.w + 0.5);
     this.touchWall = left && (steer < 0 || !right) ? -1 : right ? 1 : 0;
     this.wallContact = this.touchWall && steer === this.touchWall ? this.touchWall : 0;
-    this.groundTypes.clear();
-    if (this.grounded) {
-      map.forBox(this.x, this.y + this.h, this.w, 1, (c, r, t) => {
-        if (isSolid(t)) this.groundTypes.add(t);
-      });
-    }
   }
 
   land(speed) {
@@ -532,47 +575,28 @@ export class Player {
     this.squash = Math.min(1, speed / P.landSquashSpeed);
   }
 
-  // Move by (dx, dy), removing the tiles we enter. Returns the removed cells,
-  // or null if something `rule` can't dig is in the way (and we don't move).
-  burrowStep(dx, dy, rule, world) {
-    const { blocked, cells } = world.level.map.carveBox(this.x + dx, this.y + dy, this.w, this.h, rule);
-    if (blocked) return null;
-    this.x += dx;
-    this.y += dy;
-    for (const { c, r } of cells) world.fx.dirt(c * TILE + TILE / 2, r * TILE + TILE / 2, 6);
-    return cells;
-  }
-
   digPhysics(dt, world) {
     const m = this.move;
-    const cells = this.burrowStep(0, M.burrow.digSpeed * dt, m.rule, world);
-    if (!cells) return this.endMove(world, 'context'); // hit something too hard: stand on it
     this.vx = 0;
     this.vy = M.burrow.digSpeed;
-    this.grounded = false;
-    for (const { r } of cells) m.edge = Math.max(m.edge ?? 0, (r + 1) * TILE);
+    this.moveAndCollide(dt, 0, world.level.world);
     if (Math.random() < 0.4) world.fx.dirt(this.x + this.w / 2, this.y + this.h, 1);
-    const below = world.level.map.anyInBox(this.x, this.y + this.h, this.w, 1, isSolid);
-    if (m.edge !== undefined && this.y + this.h >= m.edge && !below) this.breakThrough(m, world);
+    if (this.grounded) return this.endMove(world, 'context'); // something solid below the hole
+    if (this.y + this.h * 0.5 >= m.edge) this.breakThrough(m, world);
   }
 
   tunnelPhysics(dt, world) {
     const m = this.move;
-    const cells = this.burrowStep(m.side * m.speed * dt, 0, m.rule, world);
-    if (!cells) return this.endMove(world, 'context');
-    this.vx = m.side * m.speed;
+    const speed = m.variant === 'wallBurrow' ? C.wallBurrow.speed : m.speed;
+    const x0 = this.x;
+    this.vx = m.side * speed;
     this.vy = 0;
-    this.grounded = false;
-    this.touchWall = m.side;
-    for (const { c } of cells) {
-      const e = m.side > 0 ? (c + 1) * TILE : c * TILE;
-      m.edge = m.edge === undefined ? e : m.side > 0 ? Math.max(m.edge, e) : Math.min(m.edge, e);
-    }
+    this.leaveGround();
+    this.moveAndCollide(dt, 0, world.level.world);
     if (Math.random() < 0.5) world.fx.dirt(m.side > 0 ? this.x + this.w : this.x, this.y + this.h / 2, 1);
-    if (m.edge === undefined) return;
+    if (Math.abs(this.x - x0) < 0.01) return this.endMove(world, 'context'); // blocked
     const past = m.side > 0 ? this.x >= m.edge : this.x + this.w <= m.edge;
-    const ahead = world.level.map.anyInBox(m.side > 0 ? this.x + this.w : this.x - 1, this.y, 1, this.h, isWall);
-    if (past && !ahead) {
+    if (past) {
       this.carry = M.burrow.exitCarry;
       this.breakThrough(m, world);
     }
@@ -587,42 +611,51 @@ export class Player {
 
   drillPhysics(dt, world) {
     const m = this.move;
-    const map = world.level.map;
+    const geo = world.level.world;
     this.vx = 0;
     this.vy = Math.max(this.vy, C.drill.minSpeed * 0.5);
-    this.grounded = false;
-    const n = Math.max(1, Math.ceil((this.vy * dt) / 8));
+    this.leaveGround();
+    const n = Math.max(1, Math.ceil((this.vy * dt) / 6));
     for (let i = 0; i < n; i++) {
+      const prevFoot = this.y + this.h;
       const ny = this.y + (this.vy * dt) / n;
-      const hits = [];
-      map.forBox(this.x, ny, this.w, this.h, (c, r, t) => {
-        if (isSolid(t)) hits.push({ c, r, t });
-      });
-      if (!hits.length) {
+      const cx = this.x + this.w / 2;
+      // What are we about to hit: a ledge surface or a block?
+      let hit = null;
+      for (const l of geo.ledges) {
+        if (cx < l.x1 || cx > l.x2) continue;
+        const sy = surfaceY(l, cx);
+        if (prevFoot <= sy + 0.5 && ny + this.h >= sy && (!hit || sy < hit.top)) hit = { ledge: l, top: sy };
+      }
+      for (const b of geo.blocksIn(this.x, ny, this.w, this.h)) {
+        if (!hit || b.y < hit.top) hit = { block: b, top: b.y };
+      }
+      if (!hit) {
         this.y = ny;
         continue;
       }
-      const top = Math.min(...hits.map((h) => h.r)) * TILE;
-      const rows = new Set(hits.map((h) => h.r)).size;
-      if (hits.some((h) => h.t === T.PAD)) {
-        this.y = top - this.h;
+      if (hit.ledge?.kind === 'pad') {
+        this.y = hit.top - this.h;
         this.vy = H.padBounce;
         this.padBounced = true;
         return this.endMove(world, 'context');
       }
-      if (hits.some((h) => !DIG_RULES.drill(h.t)) || rows > m.charges) {
+      const breakable = hit.ledge ? RULES.drill.ledge(hit.ledge.kind) : RULES.drill.block(hit.block.kind);
+      if (!breakable || m.charges <= 0) {
         // Out of power, or rock: stop on top. A drill's own landing never hurts.
-        this.y = top - this.h;
+        this.y = hit.top - this.h;
         this.vy = 0;
+        this.ground = hit.ledge ? { ledge: hit.ledge } : { block: hit.block };
         this.grounded = true;
         return this.endMove(world, 'context');
       }
-      for (const h of hits) map.set(h.c, h.r, T.EMPTY);
-      m.charges -= rows;
-      this.vy *= C.drill.layerSlowdown ** rows;
+      if (hit.ledge) geo.carveLedge(hit.ledge, this.x - 6, this.x + this.w + 6);
+      else geo.carveBlock(hit.block, { x: this.x - 4, y: hit.block.y - 1, w: this.w + 8, h: hit.block.h + 2 });
+      m.charges--;
+      this.vy *= C.drill.layerSlowdown;
       this.y = ny;
-      world.score?.destroy(rows);
-      world.fx.dirt(this.x + this.w / 2, top, 16);
+      world.score?.destroy(1);
+      world.fx.dirt(cx, hit.top, 16);
       world.fx.shake(2);
     }
   }

@@ -8,7 +8,7 @@
 
 import { CONFIG } from './config.js';
 import { circleHitsBox } from './entities/hazards.js';
-import { T } from './level/tiles.js';
+import { surfaceY } from './level/world.js';
 
 const S = CONFIG.score;
 const U = CONFIG.world.unitsPerMeter;
@@ -125,9 +125,14 @@ export class Score {
       check(r, boxes(r, player), boxes(r, grown), 'CLOSE CALL');
     }
     // Skimming just over spikes without landing on them (Ears make this possible).
-    const overSpikes = !player.grounded &&
-      level.map.anyInBox(player.x, player.y + player.h, player.w, m * 2, (t) => t === T.SPIKES);
-    const onSpikes = player.grounded && player.groundTypes.has(T.SPIKES);
+    const cx = player.x + player.w / 2;
+    const foot = player.y + player.h;
+    const overSpikes = !player.grounded && level.world.ledges.some((l) => {
+      if (l.kind !== 'spikes' || cx < l.x1 || cx > l.x2) return false;
+      const gap = surfaceY(l, cx) - foot;
+      return gap >= 0 && gap < m * 2;
+    });
+    const onSpikes = player.grounded && player.groundKind === 'spikes';
     if (overSpikes || onSpikes) {
       this.skim ??= { touched: false };
       if (onSpikes) this.skim.touched = true;

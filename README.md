@@ -9,7 +9,8 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 ## Status & running locally
 
 - **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow), M4 (endless chunk-based level, hazards, health) and M5 (scoring, combo multiplier, high score, start and game-over screens).
-- **Tunnel redesign (after the M5 playtest):** the open shaft with thin ledges became tile terrain with tunnels that keep turning left and right, soft dirt you can tunnel through, a ground jump, and wall slides where letting go drops you and jumping kicks off. See §5–§7. Tested in a mobile-emulated browser and a headless sim (including a pathfinding bot), but not yet on a real phone.
+- **Open-cavern landscape redesign (after the tunnel playtest):** the game is now landscape. It's a wide, open cavern with long stretches of falling, broken up by long sloped ledges that catch you and slide you left or right, then launch you off their end. Occasional blocks (pillars, overhangs, soft walls) give the wall and burrow moves something to work with. The tile tunnels were too cramped. See §5–§8.
+- *Previous iteration, tunnel redesign:* the open shaft with thin ledges became tile terrain with tunnels that keep turning left and right, soft dirt you can tunnel through, a ground jump, and wall slides where letting go drops you and jumping kicks off. See §5–§7. Tested in a mobile-emulated browser and a headless sim (including a pathfinding bot), but not yet on a real phone.
 - **Run locally:** `python3 -m http.server` in the repo root, then open `http://localhost:8000`. ES modules don't load from `file://`.
 - **Deploy:** Settings → Pages → *Deploy from a branch* → `main` / `(root)`. `.nojekyll` is included so files are served as-is.
 - **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=secretWall` repeats a single chunk, which is handy when authoring chunks. `?debug` shows FPS, seed, tier and move state. `window.__game` exposes the player, level, camera and score in the console.
@@ -146,27 +147,26 @@ Rules of thumb:
 
 **Landing damage (proposed):** impact damage scales with vertical speed at contact; above a threshold it hurts unless the landing is part of a protective chain.
 
-**As built (tile terrain):** the world is a grid of 18-unit tiles, 20 across the screen (`src/level/tiles.js`).
-
-| Tile | Behaviour |
-|---|---|
-| Dirt (brown, grass on top) | Solid. Only Drill or Wall Burrow get through it. |
-| **Soft dirt** (tan, speckled) | Solid. Dig down into it or tunnel sideways through it. Used for shortcuts, secret pockets and walls you can punch through. |
-| Rock (grey) | Unbreakable. The two border columns are rock. |
-| Ledge (thin slab) | One-way: land on it, jump up through it, dig down through it. |
-| Fragile ledge (pale, cracked) | One-way. Broken by Parachute Snap, rocks or digging. |
-| Spikes | Solid. Landing on top costs 1 HP and throws you toward the nearer end of the strip. Drill goes through safely. |
-| Pad (pink mushroom) | Solid. Bounces you up with no landing damage. |
-| Loose rocks (grey, cracked) | A rockfall source: when you pass beneath it (within 4 columns), it crumbles and drops a staggered burst of rocks, with a blinking "▼ ! ▼" warning. Rocks smash fragile ledges and shatter on anything else. |
-
-- **Entities:** thorn balls (still, or patrolling their row; faster deeper down), down-rings (diving through one is a **SPEED BURST**) and carrots (+1 HP, rare).
-- **Safety net:** if the rabbit ever ends up inside a wall, it's popped out to the nearest free spot. Clipping a tile corner by up to 6 u slides you past it instead of catching.
+**As built (open cavern, `src/level/world.js`):**
+- **Ledges** are one-way slabs that can be sloped. Land on one and it pulls you downhill (`slideAccel`, with low friction), then launches you off its end along the slope. Landing on a slope turns part of the fall into sideways speed and softens the impact. You can run uphill against it, jump up through ledges from below, and dig down through them.
+  - *Fragile* (pale, cracked): broken by Parachute Snap, rocks or digging.
+  - *Spikes*: landing on top costs 1 HP and throws you off downhill, or toward the nearer end. Drill goes through safely.
+  - *Pad* (pink): bounces you up with no landing damage.
+- **Blocks** are solid rectangles.
+  - *Dirt*: only Drill or Wall Burrow get through.
+  - *Soft* (tan, dashed outline): dig down or tunnel sideways through it, so it's a wall you can punch through.
+  - *Rock*: unbreakable.
+  - Burrowing cuts a slot through a block, and the pieces either side stay.
+- **Side walls** bound the 1000-unit-wide cavern (wall slide on them, or on block sides).
+- **Rockfalls** are loose rocks hanging under an overhang. Pass beneath and they drop in a staggered burst with a blinking "▼ ! ▼" warning. They smash fragile ledges and shatter on anything else.
+- **Entities:** thorn balls (still or patrolling, faster deeper down), down-rings (diving through one is a **SPEED BURST**) and carrots (+1 HP, rare).
+- **Safety nets:** you're popped out if you ever end up inside a block, and clipping a block corner by up to 6 u slides you past it.
 
 ---
 
 ## 6. Controls (mobile-first) [PROPOSED]
 
-Portrait orientation, two thumbs. Moves are context-sensitive so there are only a few gestures:
+**Landscape** orientation (as built), two thumbs. Moves are context-sensitive so there are only a few gestures:
 
 | Input | Result |
 |---|---|
@@ -195,26 +195,23 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 - Chunks are recycled (spawn ahead, despawn behind) to keep memory flat for an infinite run.
 - Seeded RNG so a run can be replayed for debugging.
 
-**As built (tunnel redesign):**
-- **Chunks as ASCII maps** in `src/level/chunks.js`: 19 chunks across tiers 0–3, each row 18 characters (the shaft between the rock borders). The legend is at the top of the file: `#` dirt, `S` soft, `=` ledge, `~` fragile, `^` spikes, `P` pad, `K` loose rocks, `o`/`O` thorn (still/patrolling), `v` ring, `c`/`?` carrot/thorn slots, and `!`/`%` spikes/fragile by chance.
-- **Connectors:** the top row's openings are the entry and the bottom row's openings are the exit. Between two chunks the generator carves a short drop out of the exit, then a 3-row sideways tunnel spanning both openings. So chunks never need to line up, and the route keeps turning left and right. Long connector runs can get a patrolling thorn.
-- **Authoring rules:**
-  - Passages must be at least 2 tiles wide and 2 tall (the rabbit is 22×26).
-  - Rooms you're meant to jump in need about 5 rows of height.
-  - Spikes need room to steer around.
-  - Chunks are mirrored at random, and the same chunk never appears twice in a row.
-- **Difficulty:** `d` goes from 0 to 1 by 1500 m. Tiers unlock at 0, 100, 300 and 650 m, and the newest unlocked tier is weighted 2.5× more likely. As `d` rises, so do chance-tile and slot odds, thorn and rock speed, and connector-run thorns, while the straight drop before each connector shrinks from 3 rows to 1.
-- **Randomness:** layout uses the seeded RNG. Runtime randomness, such as rocks, uses a second RNG, so player behaviour never changes the layout.
-- **Recycling:** rows and entities more than 300 u above the screen are dropped.
+**As built (open cavern):**
+- **Sections** are hand-authored data in `src/level/chunks.js`: 18 sections across tiers 0–3. Coordinates use a fraction of the cavern width for x and units for y.
+  - Helpers: `ledge(x1, y1, x2, y2, {kind | spikes | fragile})`, `block(x, y, w, h, kind)`, `thorn`, `ring`, `rockfall`, and `slot` (an optional thorn or carrot).
+  - Examples: deflect (one long slope), funnel, cascade (zig-zag slopes), drift (just rings), soft shelf, spike landing, pad pop, pillars, thorn gate, fragile stack, overhang (rockfall), spike pit, thorn field, soft wall, gauntlet, chute and rock slide.
+- **Gaps:** sections are separated by **long open falls**, 520–820 u at the surface shrinking to 300–520 u at full difficulty (`difficulty.gap`). A gap sometimes holds a drifting thorn (more likely deeper) or a down-ring. Sections are mirrored at random and never repeat back to back.
+- **Difficulty:** `d` goes from 0 to 1 by 2500 m. Tiers unlock at 0, 150, 450 and 1000 m, and the newest unlocked tier is weighted 2.5× more likely. Chance-based spikes and fragile ledges, slot fills, thorn speed and rock speed all scale with `d`.
+- **Randomness:** layout uses the seeded RNG; runtime randomness (rocks) uses a second one. Everything more than 400 u above the screen is recycled.
 - **Testing:**
-  - A flood-fill check (with room for the rabbit) confirms 200 generated levels each connect for 2,400 rows.
-  - A pathfinding bot that walks, jumps, digs and tunnels reaches about 1,000–1,450 m in 5–6 minutes on every seed tried. Its remaining stalls are spots that need human air-control or jump timing (bouncing off `padPit`'s pad, jumping spike strips).
+  - 19 scripted physics scenarios pass: slope slide and launch, landing on a slope, jump-through, wall drop vs jump, dig, too hard, tunnel from the ground and from a wall slide, Drill, Wall Burrow, spikes, pad, hard landing and rockfall.
+  - A random-input bot spends about 75–80% of its time airborne and reaches about 2,800–3,100 m in 5 minutes. With damage on, it dies at 400–1,100 m.
 
 ---
 
 ## 8. Camera & presentation
 
 - Portrait, the rabbit sits in the **upper third** of the screen so the player sees what's coming.
+- *As built:* **landscape**. The whole 1000-unit cavern width always fits the screen, and the aspect ratio is clamped to 1.45–2.3, letterboxed outside that. The rabbit sits 30% down the screen. Holding the phone upright shows "Turn your phone sideways", and on Android the first tap tries fullscreen plus a landscape lock. Parallax rock shapes and dust drift past behind the cavern to sell the speed of the fall.
 - Camera pulls further ahead as fall speed increases (critical during Dive).
 - Smooth follow on horizontal sections.
 - Art: start with simple shapes/placeholder sprites; style decision is [OPEN].
@@ -234,7 +231,7 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 - Simple AABB collision for player vs. world/hazards.
 
 **Decisions made while building M0–M1:**
-- World units: the shaft is always 360 units wide and scaled to the screen width, so every phone sees the same width. Height varies with aspect ratio. On desktop the play area is letterboxed to portrait (`world.maxAspect`).
+- World units: the world has a fixed width (360 in M0–M5 portrait, now 1000 in landscape), scaled to the screen width so every device sees the same width. Visible height varies with aspect ratio.
 - `src/rng.js` holds the seeded RNG and `src/render.js` the world drawing (these files weren't in the original structure).
 - M1 ledges come from a simple seeded row generator (`src/level/generator.js`). The data-driven chunk system replaces it in M4.
 - Ledges were solid on all sides in M1 (now one-way tiles; see §5). The rabbit runs faster on the ground than it drifts in the air (`groundSteerSpeed`).

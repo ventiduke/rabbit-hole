@@ -3,13 +3,13 @@
 
 import { CONFIG } from './config.js';
 import { drawHazards } from './entities/hazards.js';
-import { drawRocks } from './entities/rockfall.js';
-import { T, TILE, COLS, isSolid } from './level/tiles.js';
+import { drawRocks, drawRockZones } from './entities/rockfall.js';
+import { WALL, LEDGE_T } from './level/world.js';
 
 const W = CONFIG.world;
 const lerp = (a, b, t) => a + (b - a) * t;
 
-// Deterministic hash so per-tile details stay put as the camera moves.
+// Deterministic hash so background details stay put as the camera moves.
 const hash = (n) => {
   n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
   n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
@@ -21,25 +21,35 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   const viewH = camera.viewH;
   const shake = fx.shakeOffset;
 
-  // Tunnel interior, darkening slowly with depth.
-  const k = Math.min(1, Math.max(0, camY / 20000));
-  ctx.fillStyle = `rgb(${lerp(30, 14, k)}, ${lerp(20, 10, k)}, ${lerp(13, 8, k)})`;
+  // Cavern air, darkening slowly with depth.
+  const k = Math.min(1, Math.max(0, camY / 30000));
+  ctx.fillStyle = `rgb(${lerp(24, 12, k)}, ${lerp(17, 10, k)}, ${lerp(14, 12, k)})`;
   ctx.fillRect(0, 0, W.width, viewH);
+  drawParallax(ctx, camY, viewH);
 
   ctx.save();
   ctx.translate(shake.x, -camY + shake.y);
 
-  // Depth markers every 10 m (behind the terrain).
+  // Depth markers every 10 m, by the right wall.
   const markEvery = W.unitsPerMeter * 10;
-  ctx.fillStyle = 'rgba(255, 230, 200, 0.16)';
-  ctx.font = '10px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(255, 230, 200, 0.18)';
+  ctx.font = '12px system-ui, sans-serif';
   ctx.textAlign = 'right';
   for (let m = Math.ceil(camY / markEvery); m * markEvery < camY + viewH; m++) {
     if (m <= 0) continue;
-    ctx.fillText(`${m * 10}m`, W.width - TILE - 4, m * markEvery - 3);
+    ctx.fillRect(W.width - WALL - 30, m * markEvery, 22, 1);
+    ctx.fillText(`${m * 10}m`, W.width - WALL - 34, m * markEvery + 4);
   }
 
-  drawTiles(ctx, level.map, camY, viewH, level.time);
+  const geo = level.world;
+  for (const b of geo.blocks) {
+    if (b.y + b.h >= camY && b.y <= camY + viewH) drawBlock(ctx, b);
+  }
+  drawRockZones(ctx, level);
+  for (const l of geo.ledges) {
+    if (Math.max(l.y1, l.y2) + LEDGE_T >= camY && Math.min(l.y1, l.y2) - 10 <= camY + viewH) drawLedge(ctx, l, level.time);
+  }
+  drawWalls(ctx, camY, viewH);
   drawHazards(ctx, level);
 
   const blink = player.invuln > 0 && !player.dead && Math.floor(player.invuln * 12) % 2 === 0;
@@ -51,142 +61,144 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   const px = lerp(player.prevX, player.x, alpha) + player.w / 2;
   const py = lerp(player.prevY, player.y, alpha);
   drawTimingBar(ctx, player, px, py);
-  fx.drawLabels(ctx, px, py, W.wallThickness + 4, W.width - W.wallThickness - 4);
+  fx.drawLabels(ctx, px, py, WALL + 4, W.width - WALL - 4);
   ctx.restore();
 }
 
-const DIRT_SHADES = ['#573a24', '#5c3e27', '#523621'];
-
-function drawTiles(ctx, map, camY, viewH, time) {
-  const r0 = Math.floor(camY / TILE) - 1;
-  const r1 = Math.ceil((camY + viewH) / TILE) + 1;
-  for (let r = r0; r <= r1; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const t = map.get(c, r);
-      if (t === T.EMPTY) continue;
-      const x = c * TILE;
-      const y = r * TILE;
-      const h = hash(c * 7919 + r * 104729);
-      const open = (dc, dr) => !isSolid(map.get(c + dc, r + dr));
-      switch (t) {
-        case T.DIRT:
-        case T.SPIKES:
-          drawDirt(ctx, x, y, h, open);
-          if (t === T.SPIKES) drawSpikes(ctx, x, y);
-          break;
-        case T.SOFT:
-          ctx.fillStyle = '#8b6a47';
-          ctx.fillRect(x, y, TILE, TILE);
-          ctx.fillStyle = '#a7845c';
-          ctx.fillRect(x + 3 + h * 5, y + 3, 3, 3);
-          ctx.fillRect(x + 11 - h * 4, y + 9 + h * 3, 3, 3);
-          ctx.fillStyle = '#6e5235';
-          ctx.fillRect(x + 6 + h * 6, y + 13, 2, 2);
-          ctx.fillRect(x + 2, y + 10 - h * 5, 2, 2);
-          edges(ctx, x, y, open, 'rgba(60, 40, 22, 0.8)', 1.5);
-          break;
-        case T.ROCK:
-          ctx.fillStyle = '#474b55';
-          ctx.fillRect(x, y, TILE, TILE);
-          ctx.fillStyle = '#5c616d';
-          ctx.fillRect(x + 1, y + 1, TILE - 4, 3);
-          ctx.fillStyle = '#383b43';
-          ctx.fillRect(x + 2 + h * 8, y + 8 + h * 5, 5, 2);
-          break;
-        case T.LEDGE:
-        case T.FRAGILE:
-          drawLedge(ctx, x, y, t === T.FRAGILE);
-          break;
-        case T.PAD:
-          drawPad(ctx, x, y, time);
-          break;
-        case T.LOOSE: {
-          const j = Math.sin(time * 30 + c) * 0.6;
-          ctx.fillStyle = '#6e665c';
-          ctx.fillRect(x + j, y, TILE, TILE);
-          ctx.strokeStyle = 'rgba(20, 16, 12, 0.85)';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(x + 3, y + 2);
-          ctx.lineTo(x + 9, y + 9);
-          ctx.lineTo(x + 6, y + 16);
-          ctx.moveTo(x + 9, y + 9);
-          ctx.lineTo(x + 16, y + 7);
-          ctx.stroke();
-          if (open(0, 1)) {
-            ctx.fillStyle = '#8d8478';
-            ctx.fillRect(x + 4, y + TILE, 4, 4);
-            ctx.fillRect(x + 11, y + TILE + 1, 3, 3);
-          }
-          break;
-        }
+// Distant rock shapes and dust drifting past at different speeds: the sense of falling.
+function drawParallax(ctx, camY, viewH) {
+  const layers = [
+    { f: 0.25, band: 340, color: 'rgba(60, 44, 34, 0.35)', size: 120 },
+    { f: 0.5, band: 260, color: 'rgba(70, 52, 40, 0.35)', size: 70 },
+  ];
+  for (const L of layers) {
+    const off = camY * L.f;
+    for (let i = Math.floor(off / L.band) - 1; i <= Math.ceil((off + viewH) / L.band) + 1; i++) {
+      for (let j = 0; j < 3; j++) {
+        const h = hash(i * 9176 + j * 131 + L.band);
+        if (h > 0.7) continue;
+        const x = hash(h * 1e9) * W.width;
+        const y = i * L.band + hash(h * 7e8) * L.band - off;
+        const s = L.size * (0.5 + hash(h * 3e8));
+        ctx.fillStyle = L.color;
+        ctx.beginPath();
+        ctx.moveTo(x - s, y);
+        ctx.lineTo(x - s * 0.3, y - s * 0.4);
+        ctx.lineTo(x + s * 0.4, y - s * 0.3);
+        ctx.lineTo(x + s, y + s * 0.1);
+        ctx.lineTo(x + s * 0.2, y + s * 0.5);
+        ctx.lineTo(x - s * 0.6, y + s * 0.35);
+        ctx.fill();
       }
+    }
+  }
+  // Dust motes.
+  const off = camY * 0.85;
+  ctx.fillStyle = 'rgba(255, 235, 210, 0.12)';
+  for (let i = Math.floor(off / 90) - 1; i <= Math.ceil((off + viewH) / 90); i++) {
+    for (let j = 0; j < 4; j++) {
+      const h = hash(i * 31337 + j * 17);
+      ctx.fillRect(h * W.width, i * 90 + hash(h * 5e8) * 90 - off, 2, 2);
     }
   }
 }
 
-function drawDirt(ctx, x, y, h, open) {
-  ctx.fillStyle = DIRT_SHADES[(h * 3) | 0];
-  ctx.fillRect(x, y, TILE, TILE);
-  if (h > 0.6) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
-    ctx.fillRect(x + h * 10, y + 4 + h * 8, 4, 3);
+function drawWalls(ctx, camY, viewH) {
+  const seg = 40;
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = '#3a2618';
+    ctx.beginPath();
+    const base = side < 0 ? 0 : W.width;
+    ctx.moveTo(base, camY - seg);
+    for (let i = Math.floor(camY / seg) - 1; i <= Math.ceil((camY + viewH) / seg) + 1; i++) {
+      const jag = WALL + (hash(i * 7 + (side > 0 ? 99991 : 0)) - 0.5) * 10;
+      ctx.lineTo(side < 0 ? jag : W.width - jag, i * seg);
+    }
+    ctx.lineTo(base, camY + viewH + seg);
+    ctx.fill();
   }
-  edges(ctx, x, y, open, '#2c1c11', 2);
-  if (open(0, -1)) {
+}
+
+function drawBlock(ctx, b) {
+  const colors = {
+    dirt: ['#5a3c26', '#2c1c11'],
+    soft: ['#8b6a47', '#5e4630'],
+    rock: ['#4a4e58', '#2f3238'],
+  }[b.kind];
+  ctx.fillStyle = colors[0];
+  ctx.fillRect(b.x, b.y, b.w, b.h);
+  // Texture.
+  ctx.fillStyle = b.kind === 'soft' ? '#a7845c' : 'rgba(0, 0, 0, 0.16)';
+  const n = Math.min(60, Math.floor((b.w * b.h) / 500));
+  for (let i = 0; i < n; i++) {
+    const h = hash(Math.floor(b.x) * 31 + Math.floor(b.y) * 17 + i * 7919);
+    ctx.fillRect(b.x + 3 + h * (b.w - 9), b.y + 3 + hash(h * 1e9) * (b.h - 9), 3, 3);
+  }
+  ctx.strokeStyle = colors[1];
+  ctx.lineWidth = 2;
+  if (b.kind === 'soft') ctx.setLineDash([6, 4]);
+  ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+  ctx.setLineDash([]);
+  if (b.kind === 'dirt') {
     ctx.fillStyle = '#5f8f3e';
-    ctx.fillRect(x, y, TILE, 3);
-    ctx.fillStyle = '#76a84f';
-    ctx.fillRect(x + h * 10, y - 1, 3, 2);
+    ctx.fillRect(b.x, b.y, b.w, 3);
   }
 }
 
-// Dark outline on the faces that touch open tunnel.
-function edges(ctx, x, y, open, color, wd) {
-  ctx.fillStyle = color;
-  if (open(-1, 0)) ctx.fillRect(x, y, wd, TILE);
-  if (open(1, 0)) ctx.fillRect(x + TILE - wd, y, wd, TILE);
-  if (open(0, 1)) ctx.fillRect(x, y + TILE - wd, TILE, wd);
-}
+const LEDGE_COLORS = {
+  ledge: ['#6b4a2f', '#5f8f3e'],
+  fragile: ['#8a7258', '#9aa86a'],
+  spikes: ['#5a3c26', '#5a3c26'],
+  pad: ['#7a3b52', '#e0568f'],
+};
 
-function drawLedge(ctx, x, y, fragile) {
-  ctx.fillStyle = fragile ? '#8a7258' : '#6b4a2f';
-  ctx.fillRect(x, y, TILE, 10);
-  ctx.fillStyle = fragile ? '#9aa86a' : '#5f8f3e';
-  ctx.fillRect(x, y, TILE, 3);
-  if (!fragile) return;
-  ctx.strokeStyle = 'rgba(30, 18, 10, 0.75)';
-  ctx.lineWidth = 1.5;
+function drawLedge(ctx, l, time) {
+  const [body, top] = LEDGE_COLORS[l.kind];
+  const wob = l.kind === 'pad' ? Math.sin(time * 6) : 0;
+  ctx.fillStyle = body;
   ctx.beginPath();
-  ctx.moveTo(x + 6, y + 3);
-  ctx.lineTo(x + 10, y + 6);
-  ctx.lineTo(x + 7, y + 10);
+  ctx.moveTo(l.x1, l.y1);
+  ctx.lineTo(l.x2, l.y2);
+  ctx.lineTo(l.x2 - 4, l.y2 + LEDGE_T);
+  ctx.lineTo(l.x1 + 4, l.y1 + LEDGE_T);
+  ctx.fill();
+  ctx.strokeStyle = top;
+  ctx.lineWidth = l.kind === 'pad' ? 6 : 3;
+  ctx.beginPath();
+  ctx.moveTo(l.x1, l.y1 + 1 + wob);
+  ctx.lineTo(l.x2, l.y2 + 1 + wob);
   ctx.stroke();
-}
 
-function drawSpikes(ctx, x, y) {
-  ctx.fillStyle = '#cfd3d6';
-  ctx.beginPath();
-  for (let i = 0; i < 2; i++) {
-    const sx = x + i * (TILE / 2);
-    ctx.moveTo(sx, y + 1);
-    ctx.lineTo(sx + TILE / 4, y - 7);
-    ctx.lineTo(sx + TILE / 2, y + 1);
+  const len = l.x2 - l.x1;
+  const dy = l.y2 - l.y1;
+  if (l.kind === 'spikes') {
+    ctx.fillStyle = '#cfd3d6';
+    ctx.beginPath();
+    for (let x = 0; x + 10 <= len; x += 10) {
+      const y0 = l.y1 + (dy * x) / len;
+      const y1 = l.y1 + (dy * (x + 10)) / len;
+      ctx.moveTo(l.x1 + x, y0 + 1);
+      ctx.lineTo(l.x1 + x + 5, (y0 + y1) / 2 - 8);
+      ctx.lineTo(l.x1 + x + 10, y1 + 1);
+    }
+    ctx.fill();
   }
-  ctx.fill();
-}
-
-function drawPad(ctx, x, y, time) {
-  const wob = Math.sin(time * 6) * 1;
-  ctx.fillStyle = '#7a3b52';
-  ctx.fillRect(x + 2, y + 6, TILE - 4, TILE - 6);
-  ctx.fillStyle = '#e0568f';
-  ctx.beginPath();
-  ctx.ellipse(x + TILE / 2, y + 7 + wob, TILE / 2 + 1, 7, 0, Math.PI, 0);
-  ctx.fill();
-  ctx.fillStyle = '#ffd1e3';
-  ctx.fillRect(x + 5, y + 2 + wob, 3, 3);
-  ctx.fillRect(x + 11, y + 3 + wob, 3, 2);
+  if (l.kind === 'fragile') {
+    ctx.strokeStyle = 'rgba(30, 18, 10, 0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let x = 14; x < len - 8; x += 30) {
+      const y = l.y1 + (dy * x) / len;
+      ctx.moveTo(l.x1 + x, y + 3);
+      ctx.lineTo(l.x1 + x + 5, y + 7);
+      ctx.lineTo(l.x1 + x + 1, y + LEDGE_T);
+    }
+    ctx.stroke();
+  }
+  if (l.kind === 'pad') {
+    ctx.fillStyle = '#ffd1e3';
+    for (let x = 8; x < len - 6; x += 18) ctx.fillRect(l.x1 + x, l.y1 + (dy * x) / len - 3 + wob, 4, 3);
+  }
 }
 
 function drawRabbit(ctx, p, alpha) {
@@ -213,6 +225,7 @@ function drawRabbit(ctx, p, alpha) {
     ears = 'down';
     ctx.rotate(-p.move.side * Math.PI / 2);
   }
+  if (p.grounded && p.groundSlope) ctx.rotate(Math.atan(p.groundSlope) * 0.8); // lean with the ledge
   if (state === 'recover') ctx.rotate(Math.sin(p.time * 30) * 0.25);
   if (state === 'dead') ctx.rotate(Math.PI);
   if (state === 'wall') {

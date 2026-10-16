@@ -1,9 +1,9 @@
-// Spike tiles, thorn balls, down-boost rings and carrots: how they touch the
-// player, and how the entities are drawn. (Pads are tiles handled in player
-// collision; tiles are drawn in render.js; rockfalls live in rockfall.js.)
+// Spiked ledges, thorn balls, down-boost rings and carrots: how they touch
+// the player, and how the entities are drawn. (Pads are ledges handled in
+// player collision; ledges are drawn in render.js; rockfalls live in rockfall.js.)
 
 import { CONFIG } from '../config.js';
-import { T, TILE } from '../level/tiles.js';
+import { slope } from '../level/world.js';
 
 const H = CONFIG.hazards;
 const M = CONFIG.moves;
@@ -21,14 +21,16 @@ export function interactHazards(player, world) {
   if (player.dead) return;
   const cx = player.x + player.w / 2;
 
-  // Spikes: landing on them hurts and bounces you toward the nearer end of
-  // the spike strip. Burrowing (Drill) goes straight through safely.
-  if (player.grounded && player.groundTypes.has(T.SPIKES) && player.move?.name !== 'burrow') {
+  // Spikes: landing on them hurts and throws you off the ledge (downhill, or
+  // toward the nearer end). Burrowing (Drill) goes straight through safely.
+  if (player.grounded && player.groundKind === 'spikes' && player.move?.name !== 'burrow') {
+    const l = player.ground.ledge;
+    const sl = slope(l);
+    const dir = Math.abs(sl) > 0.05 ? Math.sign(sl) : cx - l.x1 < l.x2 - cx ? -1 : 1;
     player.hurt(world, null);
-    player.vx = spikeEscapeDir(player, level.map) * H.spikeKnock;
+    player.vx = dir * H.spikeKnock;
     player.vy = H.spikeBounce;
     player.carry = H.spikeKnockCarry; // keep the knock so you actually clear the spikes
-    player.grounded = false;
     fx.burst(cx, player.y + player.h, { count: 8, color: '#cfd3d6', speed: 140, life: 0.3, g: 300 });
   }
 
@@ -65,18 +67,6 @@ export function interactHazards(player, world) {
     fx.text(`+${H.carrotHeal} ♥`, '#ff9a3c', 14);
   }
   level.carrots = level.carrots.filter((c) => !c.taken);
-}
-
-// -1 / 1: whichever way has fewer spike tiles before the strip ends.
-function spikeEscapeDir(player, map) {
-  const r = Math.floor((player.y + player.h + 1) / TILE);
-  const c = Math.floor((player.x + player.w / 2) / TILE);
-  const count = (dir) => {
-    let n = 0;
-    while (map.get(c + dir * (n + 1), r) === T.SPIKES) n++;
-    return n + (map.get(c + dir * (n + 1), r) === T.ROCK ? 99 : 0); // don't aim into the border
-  };
-  return count(-1) < count(1) ? -1 : 1;
 }
 
 // ---------------------------------------------------------------- drawing

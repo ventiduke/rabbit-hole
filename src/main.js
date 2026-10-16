@@ -11,7 +11,7 @@ import { randomSeed } from './rng.js';
 import { Fx } from './fx.js';
 import { Score } from './score.js';
 import { drawWorld } from './render.js';
-import { drawHud, drawDebug, drawTitle, drawTouchHints, drawGameOver } from './ui.js';
+import { drawHud, drawDebug, drawTitle, drawTouchHints, drawGameOver, drawRotateHint } from './ui.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -21,7 +21,7 @@ const STEP = 1 / CONFIG.loop.stepHz;
 // Debug handle for console tuning/tests.
 const params = new URLSearchParams(location.search);
 const fixedSeed = params.has('seed') ? Number(params.get('seed')) >>> 0 : null;
-const forceChunk = params.get('chunk'); // repeat one chunk, e.g. ?chunk=rockWall
+const forceChunk = params.get('chunk'); // repeat one section, e.g. ?chunk=cascade
 const debug = params.has('debug');      // fps / seed / tier / state readout
 
 const player = new Player();
@@ -34,11 +34,22 @@ let overTime = 0;
 let isBest = false;
 let runTime = 0;
 let scale = 1;        // device pixels per world unit
+let portrait = false; // show the "turn sideways" hint
 
+// Landscape play area: the full world width always fits the screen; the
+// aspect ratio is clamped, and anything outside it letterboxes.
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  const cssH = window.innerHeight;
-  const cssW = Math.min(window.innerWidth, cssH * CONFIG.world.maxAspect);
+  const { minAspect, maxAspect } = CONFIG.world;
+  const aspect = window.innerWidth / window.innerHeight;
+  portrait = aspect < 1;
+  const a = Math.max(minAspect, Math.min(maxAspect, aspect));
+  let cssW = Math.min(window.innerWidth, window.innerHeight * a);
+  let cssH = cssW / a;
+  if (cssH > window.innerHeight) {
+    cssH = window.innerHeight;
+    cssW = cssH * a;
+  }
   canvas.style.width = `${cssW}px`;
   canvas.style.height = `${cssH}px`;
   canvas.width = Math.round(cssW * dpr);
@@ -46,6 +57,20 @@ function resize() {
   scale = canvas.width / CONFIG.world.width;
   camera.viewH = canvas.height / scale;
 }
+
+// On phones, the first tap goes fullscreen and tries to lock landscape
+// (works on Android Chrome; iOS ignores it and shows the hint instead).
+let triedLock = false;
+canvas.addEventListener('pointerdown', (e) => {
+  if (triedLock || e.pointerType !== 'touch') return;
+  triedLock = true;
+  try {
+    const p = document.documentElement.requestFullscreen?.({ navigationUI: 'hide' });
+    p?.then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+  } catch {
+    // Not supported; the rotate hint covers it.
+  }
+});
 
 function newRun() {
   level = new LevelGenerator(fixedSeed ?? randomSeed(), forceChunk);
@@ -121,6 +146,7 @@ function render(alpha, frameDt) {
   if (scene === 'title') drawTitle(ctx, camera.viewH, score.best);
   else if (scene === 'over') drawGameOver(ctx, camera.viewH, { score, isBest, canRetry: overTime > CONFIG.ui.retryDelay, time: overTime });
   else if (lastFrame) drawTouchHints(ctx, camera.viewH, Math.min(1, CONFIG.ui.hintSeconds - runTime), lastFrame);
+  if (portrait) drawRotateHint(ctx, camera.viewH);
 }
 
 // --- Fixed-timestep loop with interpolated rendering.
@@ -147,6 +173,7 @@ document.addEventListener('visibilitychange', () => {
   acc = 0;
 });
 window.addEventListener('resize', resize);
+screen.orientation?.addEventListener?.('change', resize);
 
 window.__game = { player, camera, fx, score, get level() { return level; } };
 
