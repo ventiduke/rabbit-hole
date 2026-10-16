@@ -1,12 +1,14 @@
 // Open-cavern geometry: long one-way ledges (straight segments, often
 // sloped, so they steer you left or right) and occasional solid blocks
-// (pillars, overhangs, soft walls). The two side walls bound the play area.
+// (pillars, overhangs, soft walls). The cavern's side walls follow a profile
+// that changes with depth: normal width, thin shafts, and wide stretches that
+// run past the edges of the screen.
 
 import { CONFIG } from '../config.js';
 
 const W = CONFIG.world;
-export const WALL = W.wallThickness;          // side walls
-export const INNER = W.width - 2 * WALL;      // playable width
+export const WALL = W.wallThickness;          // side walls at normal width
+export const INNER = W.width - 2 * WALL;      // playable width at normal width
 export const LEDGE_T = CONFIG.world.ledgeThickness;
 
 // Ledge kinds: 'ledge' | 'fragile' | 'spikes' | 'pad'
@@ -29,14 +31,40 @@ export class World {
   constructor() {
     this.ledges = []; // { x1, y1, x2, y2, kind }  (x1 < x2)
     this.blocks = []; // { x, y, w, h, kind }
+    // Cavern walls: points { y, left, right }, linear in between.
+    this.profile = [{ y: -1e6, left: WALL, right: W.width - WALL }];
   }
 
-  // Solid blocks overlapping a box (side walls count as rock blocks).
+  addProfilePoint(y, left, right) {
+    this.profile.push({ y, left, right });
+  }
+
+  // { left, right } inner wall positions at depth y.
+  wallsAt(y) {
+    const p = this.profile;
+    let i = p.length - 1;
+    while (i > 0 && p[i].y > y) i--;
+    const a = p[i];
+    const b = p[i + 1];
+    if (!b) return { left: a.left, right: a.right };
+    const t = (y - a.y) / (b.y - a.y);
+    return { left: a.left + (b.left - a.left) * t, right: a.right + (b.right - a.right) * t };
+  }
+
+  // The narrowest opening over a vertical span (walls can slant in transitions).
+  wallsOver(y, h) {
+    const a = this.wallsAt(y);
+    const b = this.wallsAt(y + h);
+    return { left: Math.max(a.left, b.left), right: Math.min(a.right, b.right) };
+  }
+
+  // Solid blocks overlapping a box (the cavern walls count as rock blocks).
   blocksIn(x, y, w, h) {
     const box = { x, y, w, h };
     const hits = this.blocks.filter((b) => overlaps(box, b));
-    if (x < WALL) hits.push({ x: -1000, y: y - 1000, w: 1000 + WALL, h: h + 2000, kind: 'rock', side: true });
-    if (x + w > W.width - WALL) hits.push({ x: W.width - WALL, y: y - 1000, w: 1000, h: h + 2000, kind: 'rock', side: true });
+    const { left, right } = this.wallsOver(y, h);
+    if (x < left) hits.push({ x: left - 2000, y: y - 1000, w: 2000, h: h + 2000, kind: 'rock', side: true });
+    if (x + w > right) hits.push({ x: right, y: y - 1000, w: 2000, h: h + 2000, kind: 'rock', side: true });
     return hits;
   }
 
@@ -79,6 +107,7 @@ export class World {
   }
 
   prune(top) {
+    while (this.profile.length > 2 && this.profile[1].y < top) this.profile.shift();
     this.ledges = this.ledges.filter((l) => ledgeBottom(l) > top);
     this.blocks = this.blocks.filter((b) => b.y + b.h > top);
   }

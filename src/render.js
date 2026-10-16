@@ -18,6 +18,7 @@ const hash = (n) => {
 
 export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   const camY = lerp(camera.prevY, camera.y, alpha);
+  const camX = lerp(camera.prevX, camera.x, alpha);
   const viewH = camera.viewH;
   const shake = fx.shakeOffset;
 
@@ -25,10 +26,10 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   const k = Math.min(1, Math.max(0, camY / 30000));
   ctx.fillStyle = `rgb(${lerp(24, 12, k)}, ${lerp(17, 10, k)}, ${lerp(14, 12, k)})`;
   ctx.fillRect(0, 0, W.width, viewH);
-  drawParallax(ctx, camY, viewH);
+  drawParallax(ctx, camX, camY, viewH);
 
   ctx.save();
-  ctx.translate(shake.x, -camY + shake.y);
+  ctx.translate(-camX + shake.x, -camY + shake.y);
 
   // Depth markers every 10 m, by the right wall.
   const markEvery = W.unitsPerMeter * 10;
@@ -37,8 +38,9 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   ctx.textAlign = 'right';
   for (let m = Math.ceil(camY / markEvery); m * markEvery < camY + viewH; m++) {
     if (m <= 0) continue;
-    ctx.fillRect(W.width - WALL - 30, m * markEvery, 22, 1);
-    ctx.fillText(`${m * 10}m`, W.width - WALL - 34, m * markEvery + 4);
+    const right = Math.min(camX + W.width, level.world.wallsAt(m * markEvery).right);
+    ctx.fillRect(right - 30, m * markEvery, 22, 1);
+    ctx.fillText(`${m * 10}m`, right - 34, m * markEvery + 4);
   }
 
   const geo = level.world;
@@ -49,7 +51,7 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   for (const l of geo.ledges) {
     if (Math.max(l.y1, l.y2) + LEDGE_T >= camY && Math.min(l.y1, l.y2) - 10 <= camY + viewH) drawLedge(ctx, l, level.time);
   }
-  drawWalls(ctx, camY, viewH);
+  drawWalls(ctx, geo, camX, camY, viewH);
   drawHazards(ctx, level);
 
   const blink = player.invuln > 0 && !player.dead && Math.floor(player.invuln * 12) % 2 === 0;
@@ -60,13 +62,13 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
 
   const px = lerp(player.prevX, player.x, alpha) + player.w / 2;
   const py = lerp(player.prevY, player.y, alpha);
-  drawTimingBar(ctx, player, px, py);
-  fx.drawLabels(ctx, px, py, WALL + 4, W.width - WALL - 4);
+  drawTimingBar(ctx, player, px, py, camX + WALL, camX + W.width - WALL);
+  fx.drawLabels(ctx, px, py, camX + WALL + 4, camX + W.width - WALL - 4);
   ctx.restore();
 }
 
 // Distant rock shapes and dust drifting past at different speeds: the sense of falling.
-function drawParallax(ctx, camY, viewH) {
+function drawParallax(ctx, camX, camY, viewH) {
   const layers = [
     { f: 0.25, band: 340, color: 'rgba(60, 44, 34, 0.35)', size: 120 },
     { f: 0.5, band: 260, color: 'rgba(70, 52, 40, 0.35)', size: 70 },
@@ -77,7 +79,8 @@ function drawParallax(ctx, camY, viewH) {
       for (let j = 0; j < 3; j++) {
         const h = hash(i * 9176 + j * 131 + L.band);
         if (h > 0.7) continue;
-        const x = hash(h * 1e9) * W.width;
+        const span = W.width * 1.6;
+        const x = ((hash(h * 1e9) * span - camX * L.f) % span + span) % span - W.width * 0.3;
         const y = i * L.band + hash(h * 7e8) * L.band - off;
         const s = L.size * (0.5 + hash(h * 3e8));
         ctx.fillStyle = L.color;
@@ -98,24 +101,43 @@ function drawParallax(ctx, camY, viewH) {
   for (let i = Math.floor(off / 90) - 1; i <= Math.ceil((off + viewH) / 90); i++) {
     for (let j = 0; j < 4; j++) {
       const h = hash(i * 31337 + j * 17);
-      ctx.fillRect(h * W.width, i * 90 + hash(h * 5e8) * 90 - off, 2, 2);
+      ctx.fillRect(((h * W.width - camX * 0.85) % W.width + W.width) % W.width, i * 90 + hash(h * 5e8) * 90 - off, 2, 2);
     }
   }
 }
 
-function drawWalls(ctx, camY, viewH) {
+// Solid earth beyond the cavern walls, with a jagged edge that follows the
+// cavern's width profile.
+function drawWalls(ctx, geo, camX, camY, viewH) {
   const seg = 40;
+  const i0 = Math.floor(camY / seg) - 1;
+  const i1 = Math.ceil((camY + viewH) / seg) + 1;
   for (const side of [-1, 1]) {
     ctx.fillStyle = '#3a2618';
     ctx.beginPath();
-    const base = side < 0 ? 0 : W.width;
-    ctx.moveTo(base, camY - seg);
-    for (let i = Math.floor(camY / seg) - 1; i <= Math.ceil((camY + viewH) / seg) + 1; i++) {
-      const jag = WALL + (hash(i * 7 + (side > 0 ? 99991 : 0)) - 0.5) * 10;
-      ctx.lineTo(side < 0 ? jag : W.width - jag, i * seg);
+    const base = side < 0 ? camX - 40 : camX + W.width + 40;
+    ctx.moveTo(base, i0 * seg);
+    for (let i = i0; i <= i1; i++) {
+      const y = i * seg;
+      const walls = geo.wallsAt(y);
+      const jag = (hash(i * 7 + (side > 0 ? 99991 : 0)) - 0.5) * 10;
+      ctx.lineTo(side < 0 ? walls.left + jag : walls.right - jag, y);
     }
-    ctx.lineTo(base, camY + viewH + seg);
+    ctx.lineTo(base, i1 * seg);
     ctx.fill();
+    // A lighter rim on the cavern edge.
+    ctx.strokeStyle = 'rgba(120, 88, 60, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = i0; i <= i1; i++) {
+      const y = i * seg;
+      const walls = geo.wallsAt(y);
+      const jag = (hash(i * 7 + (side > 0 ? 99991 : 0)) - 0.5) * 10;
+      const x = side < 0 ? walls.left + jag : walls.right - jag;
+      if (i === i0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
   }
 }
 
@@ -311,11 +333,10 @@ function drawEar(ctx, x, top, len, lean) {
 }
 
 // Hold-time bar above the rabbit. The gold band is the perfect window.
-function drawTimingBar(ctx, p, cx, top) {
+function drawTimingBar(ctx, p, cx, top, minX, maxX) {
   const bw = 64;
   const bh = 6;
-  const t = W.wallThickness;
-  const x = Math.max(t + 3, Math.min(W.width - t - 3 - bw, cx - bw / 2));
+  const x = Math.max(minX + 3, Math.min(maxX - 3 - bw, cx - bw / 2));
   const y = top - 28;
   if (p.recover > 0) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';

@@ -18,6 +18,8 @@
 //
 //   diff   tier (0-3), unlocks with depth (config.difficulty.tierDepths)
 //   h      section height        weight  optional pick weight (default 1)
+//   minW / maxW  cavern widths this section fits (default minW: config.level.bands.defaultMinW);
+//          narrow shafts are ~380-540 wide, normal ~950
 
 const ledge = (x1, y1, x2, y2, o = {}) => ({ type: 'ledge', x1, y1, x2, y2, ...o });
 const block = (x, y, w, h, kind = 'dirt') => ({ type: 'block', x, y, w, h, kind });
@@ -28,39 +30,50 @@ const slot = (x, y, kinds) => ({ type: 'slot', x, y, kinds });
 
 export const CHUNKS = [
   // ---- Tier 0: long falls, ledges that send you left or right
-  { id: 'deflect', diff: 0, h: 200, items: [
+  { id: 'deflect', minW: 300, diff: 0, h: 200, items: [
     ledge(0.04, 0, 0.5, 140),
     slot(0.62, 170, ['carrot']),
   ] },
-  { id: 'funnel', diff: 0, h: 200, items: [
+  { id: 'funnel', minW: 300, diff: 0, h: 200, items: [
     ledge(0, 0, 0.4, 150),
     ledge(0.6, 150, 1, 0),
   ] },
-  { id: 'shelf', diff: 0, h: 80, items: [
+  { id: 'shelf', minW: 300, diff: 0, h: 80, items: [
     ledge(0.3, 0, 0.7, 0, { fragile: 0.4 }),
     slot(0.5, -60, ['carrot', 'thorn']),
   ] },
-  { id: 'cascade', diff: 0, h: 600, items: [
+  { id: 'cascade', minW: 380, diff: 0, h: 600, items: [
     ledge(0.12, 0, 0.55, 110),
     ledge(0.45, 330, 0.88, 220),
     ledge(0.15, 480, 0.5, 570),
   ] },
-  { id: 'drift', diff: 0, weight: 0.6, h: 380, items: [
+  { id: 'drift', minW: 300, diff: 0, weight: 0.6, h: 380, items: [
     ring(0.5, 60),
     ring(0.32, 320),
     slot(0.7, 200, ['carrot']),
   ] },
-  { id: 'softShelf', diff: 0, h: 140, items: [
+  { id: 'softShelf', minW: 400, diff: 0, h: 140, items: [
     block(0.3, 0, 0.4, 44, 'soft'),      // punch through, or slide off the ends
     ledge(0.08, 70, 0.28, 120),
   ] },
 
+  // Narrow shafts
+  { id: 'zigzag', diff: 0, minW: 300, h: 500, items: [
+    ledge(0, 0, 0.42, 50),
+    ledge(0.58, 220, 1, 170),
+    ledge(0, 440, 0.42, 490),
+  ] },
+  { id: 'softPlug', diff: 0, minW: 300, maxW: 600, h: 80, items: [
+    block(0, 0, 1, 40, 'soft'),          // the whole shaft: dig through (or Drill)
+    slot(0.5, -50, ['carrot']),
+  ] },
+
   // ---- Tier 1: spikes, pads, pillars, fragile stacks
-  { id: 'spikeLanding', diff: 1, h: 220, items: [
+  { id: 'spikeLanding', minW: 380, diff: 1, h: 220, items: [
     ledge(0.06, 0, 0.42, 130),
     ledge(0.5, 200, 0.82, 200, { kind: 'spikes' }), // you'll fly off the slope toward these
   ] },
-  { id: 'padPop', diff: 1, h: 160, items: [
+  { id: 'padPop', minW: 450, diff: 1, h: 160, items: [
     ledge(0.18, 120, 0.4, 120, { kind: 'spikes' }),
     ledge(0.43, 100, 0.57, 100, { kind: 'pad' }),
     ledge(0.6, 120, 0.82, 120, { kind: 'spikes' }),
@@ -73,15 +86,21 @@ export const CHUNKS = [
     slot(0.15, 220, ['thorn']),
     slot(0.85, 260, ['thorn', 'carrot']),
   ] },
-  { id: 'thornGate', diff: 1, h: 300, items: [
+  { id: 'thornGate', minW: 360, diff: 1, h: 300, items: [
     ledge(0, 0, 0.4, 140),
     ledge(0.6, 140, 1, 0),
     thorn(0.5, 260, { dx: 0.16, period: 2.6 }),
   ] },
-  { id: 'fragileStack', diff: 1, h: 300, items: [
+  { id: 'fragileStack', minW: 380, diff: 1, h: 300, items: [
     ledge(0.36, 0, 0.64, 0, { kind: 'fragile' }),   // Parachute Snap breaks the lot
     ledge(0.3, 140, 0.7, 140, { kind: 'fragile' }),
     ledge(0.24, 280, 0.76, 280, { kind: 'fragile' }),
+  ] },
+
+  { id: 'shaftThorns', diff: 1, minW: 300, maxW: 600, h: 480, items: [
+    thorn(0.5, 120, { dx: 0.22, period: 2.2 }), // hug the walls (wall slide) to get past
+    thorn(0.5, 320, { dx: 0.22, period: 1.8 }),
+    ledge(0.3, 470, 0.7, 470, { fragile: 0.6 }),
   ] },
 
   // ---- Tier 2: rockfalls, thorn fields, soft walls
@@ -90,7 +109,7 @@ export const CHUNKS = [
     rockfall(0.05, 48, 0.36),
     ledge(0.06, 250, 0.5, 360),          // slides you right under the falling rocks
   ] },
-  { id: 'spikePit', diff: 2, h: 340, items: [
+  { id: 'spikePit', minW: 380, diff: 2, h: 340, items: [
     ledge(0, 0, 0.38, 160),
     ledge(0.62, 160, 1, 0),
     ledge(0.42, 320, 0.58, 320, { kind: 'spikes' }),
@@ -111,7 +130,7 @@ export const CHUNKS = [
   ] },
 
   // ---- Tier 3: pressure
-  { id: 'gauntlet', diff: 3, h: 520, items: [
+  { id: 'gauntlet', minW: 450, diff: 3, h: 520, items: [
     ledge(0, 0, 0.42, 180),
     ledge(0.58, 180, 1, 0),
     thorn(0.5, 260, { dx: 0.08, period: 1.6 }),

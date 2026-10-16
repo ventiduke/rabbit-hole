@@ -10,7 +10,7 @@ export function createInput(canvas) {
   // pointerId -> { side, x0, y0, t0, kind: 'steer' | 'down' | 'up', decided }
   const pointers = new Map();
   const keys = new Set();
-  const queued = { press: false, down: false, ears: false, jump: false };
+  const queued = { press: false, down: false, ears: false, jump: false, tap: false };
   let prevBoth = false;
 
   const sideOf = (clientX) => {
@@ -56,7 +56,12 @@ export function createInput(canvas) {
     }
   });
 
-  const release = (e) => pointers.delete(e.pointerId);
+  const release = (e) => {
+    const p = pointers.get(e.pointerId);
+    // A quick touch that never became a swipe is a tap (lets go of a wall slide).
+    if (p && p.kind === 'steer' && e.type === 'pointerup' && (performance.now() - p.t0) / 1000 < I.tapTime) queued.tap = true;
+    pointers.delete(e.pointerId);
+  };
   canvas.addEventListener('pointerup', release);
   canvas.addEventListener('pointercancel', release);
   canvas.addEventListener('lostpointercapture', release);
@@ -99,13 +104,14 @@ export function createInput(canvas) {
         earsHeld: steerTouches.length > 0 || has('Space'),
         downPressed: queued.down,
         downHeld: all.some((p) => p.kind === 'down') || has('KeyS', 'ArrowDown'),
+        tap: queued.tap,
         jumpPressed: queued.jump,
         jumpHeld: all.some((p) => p.kind === 'up') || has('KeyW', 'ArrowUp'),
         pressed: queued.press,
         restart: has('KeyR'),
       };
       prevBoth = both;
-      queued.press = queued.down = queued.ears = queued.jump = false;
+      queued.press = queued.down = queued.ears = queued.jump = queued.tap = false;
       return frame;
     },
   };

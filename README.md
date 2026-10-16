@@ -10,10 +10,13 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 
 - **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow), M4 (endless chunk-based level, hazards, health) and M5 (scoring, combo multiplier, high score, start and game-over screens).
 - **Open-cavern landscape redesign (after the tunnel playtest):** the game is now landscape. It's a wide, open cavern with long stretches of falling, broken up by long sloped ledges that catch you and slide you left or right, then launch you off their end. Occasional blocks (pillars, overhangs, soft walls) give the wall and burrow moves something to work with. The tile tunnels were too cramped. See §5–§8.
+- **Playtest follow-ups:**
+  - Wall slides are sticky.
+  - The cavern's width now varies: thin shafts, and wide stretches that run past the screen edge with a panning camera (§5, §7).
 - *Previous iteration, tunnel redesign:* the open shaft with thin ledges became tile terrain with tunnels that keep turning left and right, soft dirt you can tunnel through, a ground jump, and wall slides where letting go drops you and jumping kicks off. See §5–§7. Tested in a mobile-emulated browser and a headless sim (including a pathfinding bot), but not yet on a real phone.
 - **Run locally:** `python3 -m http.server` in the repo root, then open `http://localhost:8000`. ES modules don't load from `file://`.
 - **Deploy:** Settings → Pages → *Deploy from a branch* → `main` / `(root)`. `.nojekyll` is included so files are served as-is.
-- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=secretWall` repeats a single chunk, which is handy when authoring chunks. `?debug` shows FPS, seed, tier and move state. `window.__game` exposes the player, level, camera and score in the console.
+- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=secretWall` repeats a single chunk, which is handy when authoring chunks. `?band=narrow` (or `wide` / `normal`) forces every cavern band to that width. `?debug` shows FPS, seed, tier and move state. `window.__game` exposes the player, level, camera and score in the console.
 
 ---
 
@@ -55,7 +58,7 @@ Perfect releases function like fighting-game cancel windows: they are the main w
 - **Cancelling:** starting a move while another is held ends the current one, graded like a release. So cancelling inside the perfect window counts as perfect. On keyboard, holding ↓ and then pressing Space in the gold zone gives Parachute Snap.
 - **Perfect release:** gives a flash, particles, a "PERFECT" label, a haptic buzz and 0.6 s of momentum carry (sideways speed from Ears, fall speed from Dive). The chain link window also grows from 0.2 s to 0.35 s.
 - **Timeout:** shows "TOO LONG", followed by 0.45 s of recovery with no moves and no steering.
-- **Wall drag (wall slide):** starts automatically when steering into any wall in the air. **Letting go drops you straight down; jumping (swipe up / ↑) kicks you off the wall.** The jump is graded like a release, so jumping in the gold zone gives a stronger kick. A wall jump keeps its sideways momentum until it reaches a wall or the ground ("jump flight").
+- **Wall drag (wall slide):** starts automatically when steering into any wall in the air, and it's **sticky**: you keep sliding with no input. **Jumping (swipe up / ↑) kicks you off the wall. A tap anywhere, or steering away, drops you off.** If it runs out (1.8 s) you slip off with a short recovery. The jump is graded like a release, so jumping in the gold zone gives a stronger kick. A wall jump keeps its sideways momentum until it reaches a wall or the ground ("jump flight").
 - **Ground jump:** swipe up (hold the finger for full height) or ↑. It reaches about 3.5 tiles, and releasing early gives a short hop. Coyote time (0.09 s after walking off an edge) and jump buffering (0.12 s before landing) make it forgiving. It isn't a lifecycle move (no perfect window).
 - **Burrow** picks its direction from context:
   - **Pushing into soft dirt** (wall sliding, or steering into it on the ground): **tunnel sideways**.
@@ -157,7 +160,11 @@ Rules of thumb:
   - *Soft* (tan, dashed outline): dig down or tunnel sideways through it, so it's a wall you can punch through.
   - *Rock*: unbreakable.
   - Burrowing cuts a slot through a block, and the pieces either side stay.
-- **Side walls** bound the 1000-unit-wide cavern (wall slide on them, or on block sides).
+- **Cavern walls** follow a width profile that changes with depth. You can wall slide on them or on block sides. Width comes in bands, with 380 u slanted transitions between them (`level.bands`):
+  - **Normal:** the full screen, about 950 u.
+  - **Narrow:** a 380–540 u shaft with earth on both sides. Only sections that fit get placed, and some are narrow-only (zigzag, soft plug, shaft thorns).
+  - **Wide:** extends 500–900 u past one screen edge, or half past each. The camera pans to follow you and stops where the wall comes into view, so you can see there's more out there. The normal-width section sits somewhere in the band, and the off-screen side space gets a ledge sloping back toward the middle with a carrot or ring on it, sometimes guarded by a thorn.
+  - After a normal band, the next is normal, narrow or wide by weight. Narrow and wide always return to normal, and the first 2400 u are always normal.
 - **Rockfalls** are loose rocks hanging under an overhang. Pass beneath and they drop in a staggered burst with a blinking "▼ ! ▼" warning. They smash fragile ledges and shatter on anything else.
 - **Entities:** thorn balls (still or patrolling, faster deeper down), down-rings (diving through one is a **SPEED BURST**) and carrots (+1 HP, rare).
 - **Safety nets:** you're popped out if you ever end up inside a block, and clipping a block corner by up to 6 u slides you past it.
@@ -175,7 +182,7 @@ Rules of thumb:
 | Hold both halves | Ears (lift one thumb to steer while gliding) |
 | Swipe down + hold | **In air:** Dive. **On the ground:** dig down. **Pushing into soft dirt:** tunnel sideways |
 | Steer into a wall in the air | Wall slide (automatic) |
-| Lift the steering finger while sliding | Drop straight down |
+| Tap (or steer away) while sliding | Drop off the wall (the slide sticks without holding) |
 | Lift finger(s) | Release the current move (perfect timing = lift in window) |
 
 As built: a swipe is 24 CSS px within 0.22 s (`config.input`). A finger that swipes down holds Dive/Burrow, and a finger that swipes up holds the jump; either way it stops steering until it's lifted. Ears stay open while any steering finger is still down. (The earlier "swipe sideways to wall jump" gesture was removed.)

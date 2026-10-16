@@ -1,7 +1,10 @@
 // Endless open cavern: hand-authored sections (chunks.js) placed one after
-// another with long stretches of open falling in between. Sections spawn
-// ahead of the camera and everything is recycled behind it. All layout
-// randomness comes from the seeded RNG, so a seed replays the same level.
+// another with long stretches of open falling in between. The cavern's width
+// changes in bands: normal (the full screen), narrow shafts, and wide
+// stretches that run past the screen edge (the camera pans, and there's extra
+// to find off to the side). Sections spawn ahead of the camera and everything
+// is recycled behind it. All layout randomness comes from the seeded RNG, so
+// a seed replays the same level.
 
 import { CONFIG } from '../config.js';
 import { createRng } from '../rng.js';
@@ -11,6 +14,8 @@ import { World, WALL, INNER } from './world.js';
 const LV = CONFIG.level;
 const D = CONFIG.difficulty;
 const H = CONFIG.hazards;
+const B = CONFIG.level.bands;
+const WW = CONFIG.world.width;
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -30,7 +35,9 @@ export function tierAt(y) {
 
 export class LevelGenerator {
   // forceChunk: section id to repeat (debug, ?chunk=id)
-  constructor(seed, forceChunk = null) {
+  // forceBand: 'narrow' | 'wide' | 'normal' to use every time (debug, ?band=narrow)
+  constructor(seed, forceChunk = null, forceBand = null) {
+    this.forceBand = forceBand;
     this.seed = seed;
     this.rng = createRng(seed);
     this.hazardRng = createRng(seed ^ 0x9e3779b9); // runtime randomness, kept off the layout RNG
@@ -45,6 +52,7 @@ export class LevelGenerator {
     this.warnings = [];  // rockfall telegraphs
     this.placed = [];    // recent section ids, for debugging
     this.nextY = CONFIG.player.startY + LV.startClear;
+    this.band = { type: 'normal', left: WALL, right: WW - WALL, until: forceBand ? 0 : B.firstBand };
   }
 
   update(dt, camera) {
@@ -66,12 +74,50 @@ export class LevelGenerator {
 
   // ---------------------------------------------------------------- placing
 
+  // Change the cavern's width: a slanted transition, then a new band.
+  nextBand() {
+    const prev = this.band;
+    const { rng } = this;
+    let type = 'normal';
+    if (this.forceBand) type = this.forceBand;
+    else if (prev.type === 'normal') {
+      const r = rng.next() * (B.weights.normal + B.weights.narrow + B.weights.wide);
+      type = r < B.weights.narrow ? 'narrow' : r < B.weights.narrow + B.weights.wide ? 'wide' : 'normal';
+    }
+    let left = WALL;
+    let right = WW - WALL;
+    if (type === 'narrow') {
+      const w = rng.range(B.narrow[0], B.narrow[1]);
+      const c = WW / 2 + rng.range(-B.narrowShift, B.narrowShift);
+      left = c - w / 2;
+      right = c + w / 2;
+    } else if (type === 'wide') {
+      const extra = rng.range(B.wideExtra[0], B.wideExtra[1]);
+      const r = rng.next();
+      if (r < 0.4) left -= extra;                  // more to the left
+      else if (r < 0.8) right += extra;            // more to the right
+      else { left -= extra / 2; right += extra / 2; } // both
+    }
+    const y0 = this.nextY;
+    const y1 = y0 + B.transition;
+    this.world.addProfilePoint(y0, prev.left, prev.right);
+    this.world.addProfilePoint(y1, left, right);
+    this.band = { type, left, right, until: y1 + rng.range(B.length[type][0], B.length[type][1]) };
+    this.nextY = y1 + B.settle;
+  }
+
   placeChunk() {
+    if (this.nextY >= this.band.until) this.nextBand();
     const y0 = this.nextY;
     const d = difficultyAt(y0);
-    const chunk = this.pickChunk(y0);
+    const band = this.band;
+    // The section's window: the whole band, or a normal-width slice of a wide band.
+    const bandW = band.right - band.left;
+    const secW = Math.min(bandW, INNER);
+    const secL = band.left + (bandW > secW ? this.rng.range(0, bandW - secW) : 0);
+    const chunk = this.pickChunk(y0, secW);
     const mirrored = this.rng.chance(0.5);
-    const X = (fx) => WALL + INNER * (mirrored ? 1 - fx : fx);
+    const X = (fx) => secL + secW * (mirrored ? 1 - fx : fx);
     const hazardScale = lerp(D.hazardScale[0], D.hazardScale[1], d);
     const chance = (v) => v === true || (typeof v === 'number' && this.rng.chance(v * hazardScale));
 
@@ -89,19 +135,19 @@ export class LevelGenerator {
           break;
         }
         case 'block': {
-          const w = INNER * it.w;
+          const w = secW * it.w;
           const x = mirrored ? X(it.x) - w : X(it.x);
           this.world.blocks.push({ x, y, w, h: it.h, kind: it.kind });
           break;
         }
         case 'thorn':
-          this.addThorn(X(it.x), y, INNER * (it.dx ?? 0), it.period ?? 2, d);
+          this.addThorn(X(it.x), y, secW * (it.dx ?? 0), it.period ?? 2, d);
           break;
         case 'ring':
           this.addRing(X(it.x), y);
           break;
         case 'rockfall': {
-          const w = INNER * it.w;
+          const w = secW * it.w;
           this.rockZones.push({ x: mirrored ? X(it.x) - w : X(it.x), y, w, fired: false });
           break;
         }
@@ -109,6 +155,12 @@ export class LevelGenerator {
           this.fillSlot(it.kinds, X(it.x), y, d);
           break;
       }
+    }
+
+    // Wide band: something worth exploring in the parts off to the side.
+    if (bandW > secW) {
+      if (secL - band.left >= B.sideMin) this.fillSide(band.left, secL, y0, chunk.h, d);
+      if (band.right - (secL + secW) >= B.sideMin) this.fillSide(secL + secW, band.right, y0, chunk.h, d);
     }
 
     this.placed.push(chunk.id + (mirrored ? '~' : ''));
@@ -120,17 +172,38 @@ export class LevelGenerator {
     const gap = this.rng.range(g0, g1);
     const gy = y0 + chunk.h;
     if (gap >= LV.gapThornMin && this.rng.chance(lerp(D.gapThornChance[0], D.gapThornChance[1], d))) {
-      this.addThorn(WALL + INNER * this.rng.range(0.2, 0.8), gy + gap * 0.5, INNER * this.rng.range(0, 0.15), 2.4, d);
+      this.addThorn(secL + secW * this.rng.range(0.2, 0.8), gy + gap * 0.5, secW * this.rng.range(0, 0.15), 2.4, d);
     } else if (this.rng.chance(D.gapRingChance)) {
-      this.addRing(WALL + INNER * this.rng.range(0.25, 0.75), gy + gap * 0.5);
+      this.addRing(secL + secW * this.rng.range(0.25, 0.75), gy + gap * 0.5);
     }
     this.nextY = gy + gap;
   }
 
-  pickChunk(y) {
+  // Off to the side of a wide band: a ledge sloping back toward the middle,
+  // usually with a carrot or ring on it, sometimes guarded by a thorn.
+  fillSide(a, b, y0, h, d) {
+    const { rng } = this;
+    const toMiddle = a < WW / 2 ? 1 : -1; // which way leads back
+    const w = b - a;
+    const x1 = a + w * rng.range(0.15, 0.3);
+    const x2 = b - w * rng.range(0.15, 0.3);
+    const y = y0 + rng.range(0, Math.max(40, h * 0.6));
+    const drop = rng.range(40, 120);
+    this.world.ledges.push(toMiddle > 0
+      ? { x1, y1: y, x2, y2: y + drop, kind: 'ledge' }
+      : { x1, y1: y + drop, x2, y2: y, kind: 'ledge' });
+    const cx = (x1 + x2) / 2;
+    if (rng.chance(B.sideCarrot)) this.carrots.push({ x: cx, y: y - 40 });
+    else this.addRing(cx, y - 120);
+    if (rng.chance(B.sideThorn * (0.3 + d))) this.addThorn(cx, y - 160, w * 0.2, 2.2, d);
+  }
+
+  pickChunk(y, width) {
     if (this.forceChunk) return this.forceChunk;
     const tier = tierAt(y);
-    const options = CHUNKS.filter((c) => c.diff <= tier && c !== this.lastChunk);
+    const fits = (c) => (c.minW ?? B.defaultMinW) <= width && width <= (c.maxW ?? Infinity);
+    let options = CHUNKS.filter((c) => c.diff <= tier && c !== this.lastChunk && fits(c));
+    if (!options.length) options = CHUNKS.filter((c) => fits(c));
     const weight = (c) => (c.weight ?? 1) * (c.diff === tier && tier > 0 ? D.newestTierWeight : 1);
     let r = this.rng.next() * options.reduce((s, c) => s + weight(c), 0);
     for (const c of options) {

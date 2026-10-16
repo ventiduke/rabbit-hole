@@ -33,7 +33,7 @@ export class Player {
   }
 
   reset() {
-    this.x = (W.width - this.w) / 2;
+    this.x = (W.width - this.w) / 2; // the cavern starts centred on the screen
     this.y = P.startY;
     this.vx = 0;
     this.vy = 0;
@@ -174,7 +174,8 @@ export class Player {
     if (!m) return;
     if (m.name === 'ears' && !input.earsHeld) this.endMove(world, 'release');
     else if ((m.name === 'dive' || m.name === 'burrow') && !input.downHeld) this.endMove(world, 'release');
-    else if (m.name === 'wall' && input.steer !== m.side) this.endMove(world, 'release');
+    // Wall slides are sticky: you stay on until you jump (above), tap, or steer away.
+    else if (m.name === 'wall' && (input.tap || input.steer === -m.side)) this.endMove(world, 'release');
   }
 
   groundJump(world) {
@@ -331,7 +332,7 @@ export class Player {
 
     if (m.name === 'wall') {
       if (reason === 'jump') this.wallJump(m.side, quality === 'perfect', world);
-      else if (reason === 'release') this.vx = -m.side * P.wallDropPush; // let go: drop straight down
+      else if (reason === 'release') this.vx = -m.side * P.wallDropPush; // tap / steer away: drop off
       else if (reason === 'timeout') this.vx = -m.side * M.wall.timeoutPush;
     }
     if (m.name === 'burrow') this.exitBurrow(m, quality);
@@ -452,6 +453,7 @@ export class Player {
         this.stepX((this.vx * dt) / n, geo);
         this.stepY((this.vy * dt) / n, geo, wasGrounded);
       }
+      this.clampToWalls(geo);
     }
     this.updateContacts(steer, geo);
   }
@@ -471,9 +473,22 @@ export class Player {
     this.grounded = true;
   }
 
+  // The cavern walls can slant (where it narrows or widens): keep us inside them.
+  clampToWalls(geo) {
+    const { left, right } = geo.wallsOver(this.y, this.h);
+    if (this.x < left) {
+      this.x = left;
+      if (this.vx < 0) this.vx = 0;
+    } else if (this.x + this.w > right) {
+      this.x = right - this.w;
+      if (this.vx > 0) this.vx = 0;
+    }
+  }
+
   // Safety net: if we're ever inside a block, pop out to the nearest free spot.
   unstick(geo) {
-    const inside = (x, y) => geo.solidAt(x + 0.01, y + 0.01, this.w - 0.02, this.h - 0.02);
+    this.clampToWalls(geo);
+    const inside = (x, y) => geo.blocksIn(x + 0.01, y + 0.01, this.w - 0.02, this.h - 0.02).some((b) => !b.side);
     if (!inside(this.x, this.y)) return;
     for (let d = 2; d <= 48; d += 2) {
       for (const [dx, dy] of [[0, -d], [-d, 0], [d, 0], [0, d]]) {
@@ -499,7 +514,7 @@ export class Player {
     if (!dy) return;
     const prevFoot = this.y + this.h;
     this.y += dy;
-    const hits = geo.blocksIn(this.x, this.y, this.w, this.h);
+    const hits = geo.blocksIn(this.x, this.y, this.w, this.h).filter((b) => !b.side); // walls: clampToWalls
     if (dy < 0) {
       if (!hits.length) return;
       if (this.nudge(geo, hits)) return; // jumped into a corner
@@ -627,7 +642,7 @@ export class Player {
         const sy = surfaceY(l, cx);
         if (prevFoot <= sy + 0.5 && ny + this.h >= sy && (!hit || sy < hit.top)) hit = { ledge: l, top: sy };
       }
-      for (const b of geo.blocksIn(this.x, ny, this.w, this.h)) {
+      for (const b of geo.blocksIn(this.x, ny, this.w, this.h).filter((o) => !o.side)) {
         if (!hit || b.y < hit.top) hit = { block: b, top: b.y };
       }
       if (!hit) {

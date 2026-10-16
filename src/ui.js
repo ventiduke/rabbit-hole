@@ -146,7 +146,7 @@ const CONTROLS = [
   ['Hold both halves', 'ears (glide)'],
   ['Swipe down + hold', 'dive · dig down'],
   ['…pushing into soft dirt', 'tunnel through'],
-  ['Steer into a wall', 'wall slide · lift to drop'],
+  ['Steer into a wall', 'wall slide (sticks) · tap to drop'],
   ['Release in the gold zone', 'PERFECT'],
 ];
 

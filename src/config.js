@@ -75,8 +75,8 @@ export const CONFIG = {
       vxDrag: 140,            // no steering; existing sideways speed bleeds off at this rate
     },
     wall: {
-      maxHold: 1.2,
-      perfect: [0.7, 0.85],
+      maxHold: 1.8,           // sticky: you slide until you jump, tap, steer away, or this runs out
+      perfect: [1.1, 1.35],
       minFallSpeed: -40,      // can grab once vy is above this
       fallSpeed: 135,         // ~0.4x terminal
       brake: 1800,
@@ -132,6 +132,7 @@ export const CONFIG = {
     minScreenY: 0.1,      // never push the player above this fraction of the screen
     lookAheadRate: 3,     // how fast look-ahead eases in/out (1/s)
     followRate: 10,       // vertical follow stiffness (1/s)
+    followRateX: 4,       // horizontal pan stiffness in wide caverns (1/s)
   },
 
   level: {
@@ -140,6 +141,22 @@ export const CONFIG = {
     despawnBehind: 400,   // remove things this far above the top of the screen
     minPiece: 14,         // carved ledge / block pieces smaller than this disappear
     gapThornMin: 400,     // gaps at least this long can get a drifting thorn
+    // Cavern width bands. After a normal band comes normal / narrow / wide by
+    // weight; a narrow or wide band always returns to normal.
+    bands: {
+      firstBand: 2400,              // the first stretch is always normal width
+      weights: { normal: 0.4, narrow: 0.35, wide: 0.25 },
+      length: { normal: [1600, 3200], narrow: [1300, 2400], wide: [1600, 2800] },
+      transition: 380,              // walls slant over this distance
+      settle: 120,                  // empty fall after a transition before the next section
+      narrow: [380, 540],           // narrow shaft width
+      narrowShift: 140,             // ...centre wanders this far from the middle
+      wideExtra: [500, 900],        // wide bands extend this far past one screen edge (or half each side)
+      sideMin: 260,                 // off-screen side spaces at least this wide get content
+      sideCarrot: 0.45,             // chance side content is a carrot (else a ring)
+      sideThorn: 0.5,               // x (0.3 + d): chance a thorn guards it
+      defaultMinW: 600,             // sections need this much width unless they set minW
+    },
   },
 
   // Difficulty d goes 0 -> 1 with depth; [a, b] pairs are lerped by d.
@@ -182,6 +199,7 @@ export const CONFIG = {
     swipeDistance: 24,    // CSS px a finger must travel to count as a swipe
     swipeTime: 0.22,      // seconds after touch-down a swipe can still be detected
     swipeAxisBias: 1.2,   // dominant axis must be this much larger than the other
+    tapTime: 0.22,        // a touch shorter than this (and not a swipe) is a tap
   },
 
   fx: {

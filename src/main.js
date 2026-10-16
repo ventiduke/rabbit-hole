@@ -22,6 +22,7 @@ const STEP = 1 / CONFIG.loop.stepHz;
 const params = new URLSearchParams(location.search);
 const fixedSeed = params.has('seed') ? Number(params.get('seed')) >>> 0 : null;
 const forceChunk = params.get('chunk'); // repeat one section, e.g. ?chunk=cascade
+const forceBand = params.get('band');   // cavern width every time: narrow | wide | normal
 const debug = params.has('debug');      // fps / seed / tier / state readout
 
 const player = new Player();
@@ -73,11 +74,11 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 
 function newRun() {
-  level = new LevelGenerator(fixedSeed ?? randomSeed(), forceChunk);
+  level = new LevelGenerator(fixedSeed ?? randomSeed(), forceChunk, forceBand);
   player.reset();
   fx.reset();
   score.reset();
-  camera.snapTo(player);
+  camera.snapTo(player, level.world);
   level.update(0, camera);
   runTime = 0;
 }
@@ -107,7 +108,7 @@ function step(dt) {
   interactHazards(player, world);
   updateRockfall(dt, player, world, camera);
   score.update(dt, player, world);
-  camera.update(dt, player);
+  camera.update(dt, player, level.world);
   level.update(dt, camera);
   if (player.dead) {
     scene = 'over';
