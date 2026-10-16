@@ -6,6 +6,13 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 
 > This README is both the project overview and the handoff spec for build sessions. Sections marked **[DECIDED]** are settled design; **[PROPOSED]** are starting points to tune or replace; **[OPEN]** need a decision.
 
+## Status & running locally
+
+- **Done:** M0 (scaffold, fixed-timestep loop, FPS counter) and M1 (falling, steering, walls, ledges, look-ahead camera, touch + keyboard). Not yet checked on a real phone.
+- **Run locally:** `python3 -m http.server` in the repo root, then open `http://localhost:8000`. ES modules don't load from `file://`.
+- **Deploy:** Settings → Pages → *Deploy from a branch* → `main` / `(root)`. `.nojekyll` is included so files are served as-is.
+- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run.
+
 ---
 
 ## 1. Core pillars
@@ -148,6 +155,14 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 - **All tuning values in one config file** (`src/config.js`) for fast iteration.
 - **Chunks as data** (`src/levels/chunks.js`).
 - Simple AABB collision for player vs. world/hazards.
+
+**Decisions made while building M0–M1:**
+- World units: the shaft is always 360 units wide and scaled to the screen width, so every phone sees the same width. Height varies with aspect ratio. On desktop the play area is letterboxed to portrait (`world.maxAspect`).
+- `src/rng.js` holds the seeded RNG and `src/render.js` the world drawing (these files weren't in the original structure).
+- M1 ledges come from a simple seeded row generator (`src/level/generator.js`). The data-driven chunk system replaces it in M4.
+- Ledges are solid on all sides. The rabbit lands on them and runs faster on the ground than it drifts in the air (`groundSteerSpeed`).
+- A "Tap to drop" title screen keeps the run from starting before the player is ready.
+- Holding both halves of the screen cancels steering for now. It becomes Ears in M2.
 
 **Proposed structure:**
 

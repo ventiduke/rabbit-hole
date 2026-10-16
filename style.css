@@ -1,0 +1,23 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #0d0805;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game {
+  display: block;
+  touch-action: none;
+  background: #1a110b;
+}
