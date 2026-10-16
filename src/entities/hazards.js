@@ -1,11 +1,11 @@
-// Spiked ledges, thorn balls, down-boost rings and carrots: how they touch
-// the player, and how they're drawn. (Pads are ledges with `pad: true` and are
-// handled in player collision; rockfalls live in rockfall.js.)
+// Spike tiles, thorn balls, down-boost rings and carrots: how they touch the
+// player, and how the entities are drawn. (Pads are tiles handled in player
+// collision; tiles are drawn in render.js; rockfalls live in rockfall.js.)
 
 import { CONFIG } from '../config.js';
+import { T, TILE } from '../level/tiles.js';
 
 const H = CONFIG.hazards;
-const W = CONFIG.world;
 const M = CONFIG.moves;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -19,28 +19,21 @@ export const circleHitsBox = (c, r, b) => {
 export function interactHazards(player, world) {
   const { level, fx } = world;
   if (player.dead) return;
-  const hidden = player.state === 'wallBurrow'; // inside the wall
   const cx = player.x + player.w / 2;
 
-  // Spiked ledge: hurts and bounces you toward its nearest open edge.
-  // Burrowing (Drill) goes straight through safely.
-  const l = player.grounded ? player.groundLedge : null;
-  if (l?.spikes && player.move?.name !== 'burrow') {
+  // Spikes: landing on them hurts and bounces you toward the nearer end of
+  // the spike strip. Burrowing (Drill) goes straight through safely.
+  if (player.grounded && player.groundTypes.has(T.SPIKES) && player.move?.name !== 'burrow') {
     player.hurt(world, null);
-    let dir = cx - l.x < l.x + l.w - cx ? -1 : 1;
-    if (dir < 0 && l.x <= W.wallThickness + 1) dir = 1;
-    if (dir > 0 && l.x + l.w >= W.width - W.wallThickness - 1) dir = -1;
-    player.vx = dir * H.spikeKnock;
+    player.vx = spikeEscapeDir(player, level.map) * H.spikeKnock;
     player.vy = H.spikeBounce;
     player.carry = H.spikeKnockCarry; // keep the knock so you actually clear the spikes
     player.grounded = false;
-    fx.burst(cx, l.y, { count: 8, color: '#cfd3d6', speed: 140, life: 0.3, g: 300 });
+    fx.burst(cx, player.y + player.h, { count: 8, color: '#cfd3d6', speed: 140, life: 0.3, g: 300 });
   }
 
-  if (!hidden) {
-    for (const t of level.thorns) {
-      if (circleHitsBox(t, t.r, player)) player.hurt(world, t.x);
-    }
+  for (const t of level.thorns) {
+    if (circleHitsBox(t, t.r, player)) player.hurt(world, t.x);
   }
 
   // Down-rings: passing through downward boosts the fall; diving through is a speed burst.
@@ -74,33 +67,19 @@ export function interactHazards(player, world) {
   level.carrots = level.carrots.filter((c) => !c.taken);
 }
 
+// -1 / 1: whichever way has fewer spike tiles before the strip ends.
+function spikeEscapeDir(player, map) {
+  const r = Math.floor((player.y + player.h + 1) / TILE);
+  const c = Math.floor((player.x + player.w / 2) / TILE);
+  const count = (dir) => {
+    let n = 0;
+    while (map.get(c + dir * (n + 1), r) === T.SPIKES) n++;
+    return n + (map.get(c + dir * (n + 1), r) === T.ROCK ? 99 : 0); // don't aim into the border
+  };
+  return count(-1) < count(1) ? -1 : 1;
+}
+
 // ---------------------------------------------------------------- drawing
-
-export function drawSpikes(ctx, l) {
-  ctx.fillStyle = '#cfd3d6';
-  const n = Math.max(1, Math.floor(l.w / 9));
-  const step = l.w / n;
-  ctx.beginPath();
-  for (let i = 0; i < n; i++) {
-    const x = l.x + i * step;
-    ctx.moveTo(x, l.y + 1);
-    ctx.lineTo(x + step / 2, l.y - 7);
-    ctx.lineTo(x + step, l.y + 1);
-  }
-  ctx.fill();
-}
-
-export function drawPad(ctx, l, time) {
-  const wob = Math.sin(time * 6) * 1;
-  ctx.fillStyle = '#7a3b52';
-  ctx.fillRect(l.x + 4, l.y + 4, l.w - 8, l.h - 2);
-  ctx.fillStyle = '#e0568f';
-  ctx.beginPath();
-  ctx.ellipse(l.x + l.w / 2, l.y + 4 + wob, l.w / 2, 7, 0, Math.PI, 0);
-  ctx.fill();
-  ctx.fillStyle = '#ffd1e3';
-  for (let x = l.x + 12; x < l.x + l.w - 8; x += 18) ctx.fillRect(x, l.y - 1 + wob, 4, 3);
-}
 
 export function drawHazards(ctx, level) {
   const t = level.time;

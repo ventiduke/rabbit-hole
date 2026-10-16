@@ -1,14 +1,15 @@
 // World drawing with placeholder shapes. Everything is drawn in world units;
-// the caller sets up the scale so the shaft width fills the canvas.
+// the caller sets up the scale so the world width fills the canvas.
 
 import { CONFIG } from './config.js';
-import { drawSpikes, drawPad, drawHazards } from './entities/hazards.js';
-import { drawRockZones, drawRocks } from './entities/rockfall.js';
+import { drawHazards } from './entities/hazards.js';
+import { drawRocks } from './entities/rockfall.js';
+import { T, TILE, COLS, isSolid } from './level/tiles.js';
 
 const W = CONFIG.world;
 const lerp = (a, b, t) => a + (b - a) * t;
 
-// Deterministic hash so background speckles stay put as the camera moves.
+// Deterministic hash so per-tile details stay put as the camera moves.
 const hash = (n) => {
   n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
   n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
@@ -20,53 +21,29 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   const viewH = camera.viewH;
   const shake = fx.shakeOffset;
 
-  // Soil, darkening slowly with depth.
-  const depthTint = Math.min(1, Math.max(0, camY / 20000));
-  ctx.fillStyle = `rgb(${lerp(58, 26, depthTint)}, ${lerp(38, 18, depthTint)}, ${lerp(24, 14, depthTint)})`;
+  // Tunnel interior, darkening slowly with depth.
+  const k = Math.min(1, Math.max(0, camY / 20000));
+  ctx.fillStyle = `rgb(${lerp(30, 14, k)}, ${lerp(20, 10, k)}, ${lerp(13, 8, k)})`;
   ctx.fillRect(0, 0, W.width, viewH);
 
   ctx.save();
   ctx.translate(shake.x, -camY + shake.y);
 
-  // Background speckles in 60u cells: cheap motion cue.
-  const cell = 60;
-  const first = Math.floor(camY / cell);
-  const last = Math.ceil((camY + viewH) / cell);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
-  for (let row = first; row <= last; row++) {
-    for (let col = 0; col < W.width / cell; col++) {
-      const h = hash(row * 73856093 ^ col * 19349663);
-      if (h > 0.55) continue;
-      const x = col * cell + hash(h * 1e9) * cell;
-      const y = row * cell + hash(h * 7e8) * cell;
-      ctx.fillRect(x, y, 3 + h * 6, 2 + h * 4);
-    }
-  }
-
-  // Depth markers every 10 m.
+  // Depth markers every 10 m (behind the terrain).
   const markEvery = W.unitsPerMeter * 10;
-  ctx.fillStyle = 'rgba(255, 230, 200, 0.22)';
+  ctx.fillStyle = 'rgba(255, 230, 200, 0.16)';
   ctx.font = '10px system-ui, sans-serif';
-  ctx.textAlign = 'center';
+  ctx.textAlign = 'right';
   for (let m = Math.ceil(camY / markEvery); m * markEvery < camY + viewH; m++) {
     if (m <= 0) continue;
-    ctx.fillRect(W.width / 2 - 14, m * markEvery, 28, 1);
-    ctx.fillText(`${m * 10}m`, W.width / 2, m * markEvery - 4);
+    ctx.fillText(`${m * 10}m`, W.width - TILE - 4, m * markEvery - 3);
   }
 
-  for (const l of level.ledges) {
-    if (l.pad) drawPad(ctx, l, level.time);
-    else drawLedge(ctx, l);
-  }
+  drawTiles(ctx, level.map, camY, viewH, level.time);
   drawHazards(ctx, level);
 
-  // Wall burrowing happens behind the wall surface.
-  const inWall = player.state === 'wallBurrow';
   const blink = player.invuln > 0 && !player.dead && Math.floor(player.invuln * 12) % 2 === 0;
-  if (inWall) drawRabbit(ctx, player, alpha);
-  drawWalls(ctx, camY, viewH, inWall);
-  drawRockZones(ctx, level);
-  if (!inWall && !blink) drawRabbit(ctx, player, alpha);
+  if (!blink) drawRabbit(ctx, player, alpha);
   drawRocks(ctx, level, camY);
 
   fx.drawWorld(ctx);
@@ -78,39 +55,138 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   ctx.restore();
 }
 
-function drawLedge(ctx, l) {
-  ctx.fillStyle = l.fragile ? '#8a7258' : '#6b4a2f';
-  ctx.fillRect(l.x, l.y, l.w, l.h);
-  ctx.fillStyle = l.fragile ? '#9aa86a' : '#5f8f3e';
-  ctx.fillRect(l.x, l.y, l.w, 4);
-  if (l.spikes) drawSpikes(ctx, l);
-  if (!l.fragile) return;
-  // Cracks.
-  ctx.strokeStyle = 'rgba(30, 18, 10, 0.7)';
+const DIRT_SHADES = ['#573a24', '#5c3e27', '#523621'];
+
+function drawTiles(ctx, map, camY, viewH, time) {
+  const r0 = Math.floor(camY / TILE) - 1;
+  const r1 = Math.ceil((camY + viewH) / TILE) + 1;
+  for (let r = r0; r <= r1; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const t = map.get(c, r);
+      if (t === T.EMPTY) continue;
+      const x = c * TILE;
+      const y = r * TILE;
+      const h = hash(c * 7919 + r * 104729);
+      const open = (dc, dr) => !isSolid(map.get(c + dc, r + dr));
+      switch (t) {
+        case T.DIRT:
+        case T.SPIKES:
+          drawDirt(ctx, x, y, h, open);
+          if (t === T.SPIKES) drawSpikes(ctx, x, y);
+          break;
+        case T.SOFT:
+          ctx.fillStyle = '#8b6a47';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#a7845c';
+          ctx.fillRect(x + 3 + h * 5, y + 3, 3, 3);
+          ctx.fillRect(x + 11 - h * 4, y + 9 + h * 3, 3, 3);
+          ctx.fillStyle = '#6e5235';
+          ctx.fillRect(x + 6 + h * 6, y + 13, 2, 2);
+          ctx.fillRect(x + 2, y + 10 - h * 5, 2, 2);
+          edges(ctx, x, y, open, 'rgba(60, 40, 22, 0.8)', 1.5);
+          break;
+        case T.ROCK:
+          ctx.fillStyle = '#474b55';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#5c616d';
+          ctx.fillRect(x + 1, y + 1, TILE - 4, 3);
+          ctx.fillStyle = '#383b43';
+          ctx.fillRect(x + 2 + h * 8, y + 8 + h * 5, 5, 2);
+          break;
+        case T.LEDGE:
+        case T.FRAGILE:
+          drawLedge(ctx, x, y, t === T.FRAGILE);
+          break;
+        case T.PAD:
+          drawPad(ctx, x, y, time);
+          break;
+        case T.LOOSE: {
+          const j = Math.sin(time * 30 + c) * 0.6;
+          ctx.fillStyle = '#6e665c';
+          ctx.fillRect(x + j, y, TILE, TILE);
+          ctx.strokeStyle = 'rgba(20, 16, 12, 0.85)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x + 3, y + 2);
+          ctx.lineTo(x + 9, y + 9);
+          ctx.lineTo(x + 6, y + 16);
+          ctx.moveTo(x + 9, y + 9);
+          ctx.lineTo(x + 16, y + 7);
+          ctx.stroke();
+          if (open(0, 1)) {
+            ctx.fillStyle = '#8d8478';
+            ctx.fillRect(x + 4, y + TILE, 4, 4);
+            ctx.fillRect(x + 11, y + TILE + 1, 3, 3);
+          }
+          break;
+        }
+      }
+    }
+  }
+}
+
+function drawDirt(ctx, x, y, h, open) {
+  ctx.fillStyle = DIRT_SHADES[(h * 3) | 0];
+  ctx.fillRect(x, y, TILE, TILE);
+  if (h > 0.6) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.fillRect(x + h * 10, y + 4 + h * 8, 4, 3);
+  }
+  edges(ctx, x, y, open, '#2c1c11', 2);
+  if (open(0, -1)) {
+    ctx.fillStyle = '#5f8f3e';
+    ctx.fillRect(x, y, TILE, 3);
+    ctx.fillStyle = '#76a84f';
+    ctx.fillRect(x + h * 10, y - 1, 3, 2);
+  }
+}
+
+// Dark outline on the faces that touch open tunnel.
+function edges(ctx, x, y, open, color, wd) {
+  ctx.fillStyle = color;
+  if (open(-1, 0)) ctx.fillRect(x, y, wd, TILE);
+  if (open(1, 0)) ctx.fillRect(x + TILE - wd, y, wd, TILE);
+  if (open(0, 1)) ctx.fillRect(x, y + TILE - wd, TILE, wd);
+}
+
+function drawLedge(ctx, x, y, fragile) {
+  ctx.fillStyle = fragile ? '#8a7258' : '#6b4a2f';
+  ctx.fillRect(x, y, TILE, 10);
+  ctx.fillStyle = fragile ? '#9aa86a' : '#5f8f3e';
+  ctx.fillRect(x, y, TILE, 3);
+  if (!fragile) return;
+  ctx.strokeStyle = 'rgba(30, 18, 10, 0.75)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  for (let x = l.x + 12; x < l.x + l.w - 6; x += 22) {
-    ctx.moveTo(x, l.y + 4);
-    ctx.lineTo(x + 5, l.y + 9);
-    ctx.lineTo(x + 1, l.y + l.h);
-  }
+  ctx.moveTo(x + 6, y + 3);
+  ctx.lineTo(x + 10, y + 6);
+  ctx.lineTo(x + 7, y + 10);
   ctx.stroke();
 }
 
-function drawWalls(ctx, camY, viewH, translucent) {
-  const t = W.wallThickness;
-  ctx.globalAlpha = translucent ? 0.75 : 1;
-  ctx.fillStyle = '#2a1a10';
-  ctx.fillRect(0, camY, t, viewH);
-  ctx.fillRect(W.width - t, camY, t, viewH);
-  ctx.fillStyle = '#3d2818';
-  const groove = 34;
-  for (let g = Math.floor(camY / groove); g * groove < camY + viewH; g++) {
-    const off = hash(g) * 8;
-    ctx.fillRect(2, g * groove + off, t - 6, 3);
-    ctx.fillRect(W.width - t + 4, g * groove + 17 - off, t - 6, 3);
+function drawSpikes(ctx, x, y) {
+  ctx.fillStyle = '#cfd3d6';
+  ctx.beginPath();
+  for (let i = 0; i < 2; i++) {
+    const sx = x + i * (TILE / 2);
+    ctx.moveTo(sx, y + 1);
+    ctx.lineTo(sx + TILE / 4, y - 7);
+    ctx.lineTo(sx + TILE / 2, y + 1);
   }
-  ctx.globalAlpha = 1;
+  ctx.fill();
+}
+
+function drawPad(ctx, x, y, time) {
+  const wob = Math.sin(time * 6) * 1;
+  ctx.fillStyle = '#7a3b52';
+  ctx.fillRect(x + 2, y + 6, TILE - 4, TILE - 6);
+  ctx.fillStyle = '#e0568f';
+  ctx.beginPath();
+  ctx.ellipse(x + TILE / 2, y + 7 + wob, TILE / 2 + 1, 7, 0, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = '#ffd1e3';
+  ctx.fillRect(x + 5, y + 2 + wob, 3, 3);
+  ctx.fillRect(x + 11, y + 3 + wob, 3, 2);
 }
 
 function drawRabbit(ctx, p, alpha) {
@@ -132,7 +208,7 @@ function drawRabbit(ctx, p, alpha) {
     w *= 0.75;
     h *= 1.15;
   }
-  if (state === 'wallBurrow') {
+  if ((state === 'wallBurrow' || state === 'tunnel') && !p.move.broke) {
     // Head-first into the wall.
     ears = 'down';
     ctx.rotate(-p.move.side * Math.PI / 2);

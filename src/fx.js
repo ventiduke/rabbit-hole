@@ -123,6 +123,12 @@ export class Fx {
     this.burst(x, player.y + player.h, { count: 8, color: '#c9b49c', speed: 110, life: 0.35, g: 200, dir: side < 0 ? 0 : Math.PI, spread: 1.2 });
   }
 
+  // Tried to burrow into something too hard.
+  clunk(player) {
+    this.burst(player.x + player.w / 2, player.y + player.h, { count: 6, color: '#9a9a9a', speed: 90, life: 0.25, g: 300 });
+    this.text('TOO HARD', '#b9a99a', 10);
+  }
+
   dirt(x, y, count) {
     this.burst(x, y, { count, color: '#8a6440', speed: 120, life: 0.5, g: 500, size: 3 });
   }

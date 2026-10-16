@@ -139,17 +139,19 @@ export function drawGameOver(ctx, viewH, { score, isBest, canRetry, time }) {
 }
 
 const CONTROLS = [
-  ['Hold left / right', 'steer'],
+  ['Hold left / right', 'steer · run'],
+  ['Swipe up', 'jump · wall jump'],
   ['Hold both halves', 'ears (glide)'],
-  ['Swipe down + hold', 'dive · burrow on ledge'],
-  ['Steer into wall', 'wall drag · lift to jump'],
-  ['Lift in the gold zone', 'PERFECT'],
+  ['Swipe down + hold', 'dive · dig down'],
+  ['…pushing into soft dirt', 'tunnel sideways'],
+  ['Steer into wall', 'wall slide · lift to drop'],
+  ['Release in the gold zone', 'PERFECT'],
 ];
 
 export function drawTitle(ctx, viewH, best) {
   ctx.fillStyle = 'rgba(10, 6, 3, 0.72)';
   ctx.fillRect(0, 0, W.width, viewH);
-  const y0 = viewH * 0.46;
+  const y0 = viewH * 0.4;
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f2ebe2';
   ctx.font = 'bold 36px system-ui, sans-serif';
@@ -178,8 +180,8 @@ export function drawTitle(ctx, viewH, best) {
   ctx.font = '11px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(242, 235, 226, 0.45)';
   ctx.fillText('Chains: Drill · Parachute Snap · Soft Landing · Wall Burrow', W.width / 2, y0 + 80 + CONTROLS.length * 22 + 14);
-  ctx.fillText('Keys: ← → steer · Space ears · ↓ dive/burrow', W.width / 2, y0 + 80 + CONTROLS.length * 22 + 32);
-  ctx.fillText('↑ wall jump · R restart', W.width / 2, y0 + 80 + CONTROLS.length * 22 + 48);
+  ctx.fillText('Keys: ← → steer · ↑ jump · Space ears', W.width / 2, y0 + 80 + CONTROLS.length * 22 + 32);
+  ctx.fillText('↓ dive / burrow · R restart', W.width / 2, y0 + 80 + CONTROLS.length * 22 + 48);
 }
 
 // Faint touch-zone hints for the first few seconds of a run.

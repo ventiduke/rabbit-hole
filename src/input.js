@@ -7,7 +7,7 @@ import { CONFIG } from './config.js';
 const I = CONFIG.input;
 
 export function createInput(canvas) {
-  // pointerId -> { side, x0, y0, t0, kind: 'steer' | 'down', decided }
+  // pointerId -> { side, x0, y0, t0, kind: 'steer' | 'down' | 'up', decided }
   const pointers = new Map();
   const keys = new Set();
   const queued = { press: false, down: false, ears: false, jump: false };
@@ -48,7 +48,9 @@ export function createInput(canvas) {
       p.kind = 'down';
       p.decided = true;
       queued.down = true;
-    } else if (Math.abs(dx) > I.swipeDistance && Math.abs(dx) > Math.abs(dy) * I.swipeAxisBias) {
+    } else if (-dy > I.swipeDistance && -dy > Math.abs(dx) * I.swipeAxisBias) {
+      // Swipe up: jump (hold the finger down for a higher jump).
+      p.kind = 'up';
       p.decided = true;
       queued.jump = true;
     }
@@ -97,7 +99,8 @@ export function createInput(canvas) {
         earsHeld: steerTouches.length > 0 || has('Space'),
         downPressed: queued.down,
         downHeld: all.some((p) => p.kind === 'down') || has('KeyS', 'ArrowDown'),
-        jump: queued.jump,
+        jumpPressed: queued.jump,
+        jumpHeld: all.some((p) => p.kind === 'up') || has('KeyW', 'ArrowUp'),
         pressed: queued.press,
         restart: has('KeyR'),
       };

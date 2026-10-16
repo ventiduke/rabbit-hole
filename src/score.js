@@ -8,6 +8,7 @@
 
 import { CONFIG } from './config.js';
 import { circleHitsBox } from './entities/hazards.js';
+import { T } from './level/tiles.js';
 
 const S = CONFIG.score;
 const U = CONFIG.world.unitsPerMeter;
@@ -26,6 +27,7 @@ export class Score {
     this.popups = [];      // { text, value, age }
     this.stats = { perfects: 0, chains: 0, closeCalls: 0, maxMult: 1, longestChain: 1, hits: 0 };
     this.pendingZones = [];
+    this.skim = null; // { touched } while passing just above spikes
   }
 
   // ---------------------------------------------------------------- events
@@ -99,7 +101,7 @@ export class Score {
 
   // A close call: a hazard came within closeCallMargin and you got away clean.
   trackCloseCalls(player, { level, fx }) {
-    if (player.dead || player.state === 'wallBurrow') return;
+    if (player.dead) return;
     const m = S.closeCallMargin;
     const grown = { x: player.x - m, y: player.y - m, w: player.w + 2 * m, h: player.h + 2 * m };
     const check = (o, touching, near, label) => {
@@ -122,12 +124,19 @@ export class Score {
       if (r.delay > 0) continue;
       check(r, boxes(r, player), boxes(r, grown), 'CLOSE CALL');
     }
-    // Skimming over spikes without landing on them (Ears make this possible).
-    for (const l of level.ledges) {
-      if (!l.spikes) continue;
-      const over = player.x + player.w > l.x && player.x < l.x + l.w;
-      const gap = l.y - (player.y + player.h);
-      check(l, player.grounded && player.groundLedge === l, over && gap >= 0 && gap < m * 2, 'SKIM');
+    // Skimming just over spikes without landing on them (Ears make this possible).
+    const overSpikes = !player.grounded &&
+      level.map.anyInBox(player.x, player.y + player.h, player.w, m * 2, (t) => t === T.SPIKES);
+    const onSpikes = player.grounded && player.groundTypes.has(T.SPIKES);
+    if (overSpikes || onSpikes) {
+      this.skim ??= { touched: false };
+      if (onSpikes) this.skim.touched = true;
+    } else if (this.skim) {
+      if (!this.skim.touched) {
+        this.closeCall('SKIM');
+        fx.text('SKIM', '#c8f0ff', 11);
+      }
+      this.skim = null;
     }
   }
 

@@ -8,10 +8,11 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 
 ## Status & running locally
 
-- **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow), M4 (endless chunk-based level, hazards, health) and M5 (scoring, combo multiplier, high score, start and game-over screens). M2–M5 were tested in a mobile-emulated browser and a headless sim, but not yet on a real phone.
+- **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow), M4 (endless chunk-based level, hazards, health) and M5 (scoring, combo multiplier, high score, start and game-over screens).
+- **Tunnel redesign (after the M5 playtest):** the open shaft with thin ledges became tile terrain with tunnels that keep turning left and right, soft dirt you can tunnel through, a ground jump, and wall slides where letting go drops you and jumping kicks off. See §5–§7. Tested in a mobile-emulated browser and a headless sim (including a pathfinding bot), but not yet on a real phone.
 - **Run locally:** `python3 -m http.server` in the repo root, then open `http://localhost:8000`. ES modules don't load from `file://`.
 - **Deploy:** Settings → Pages → *Deploy from a branch* → `main` / `(root)`. `.nojekyll` is included so files are served as-is.
-- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=rockWall` repeats a single chunk, which is handy when authoring chunks. `?debug` shows FPS, seed, tier and move state. `window.__game` exposes the player, level, camera and score in the console.
+- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=secretWall` repeats a single chunk, which is handy when authoring chunks. `?debug` shows FPS, seed, tier and move state. `window.__game` exposes the player, level, camera and score in the console.
 
 ---
 
@@ -53,8 +54,13 @@ Perfect releases function like fighting-game cancel windows: they are the main w
 - **Cancelling:** starting a move while another is held ends the current one, graded like a release. So cancelling inside the perfect window counts as perfect. On keyboard, holding ↓ and then pressing Space in the gold zone gives Parachute Snap.
 - **Perfect release:** gives a flash, particles, a "PERFECT" label, a haptic buzz and 0.6 s of momentum carry (sideways speed from Ears, fall speed from Dive). The chain link window also grows from 0.2 s to 0.35 s.
 - **Timeout:** shows "TOO LONG", followed by 0.45 s of recovery with no moves and no steering.
-- **Wall drag:** starts automatically when steering into a wall in the air. Lifting the steering finger, swiping sideways, or pressing ↑ jumps. A wall jump keeps its sideways momentum until it reaches a wall or the ground ("jump flight").
-- **Burrow:** a slow dig through the ledge. Letting go before breaking through climbs back out. The perfect window opens right after you break through ("clean exit": a little extra speed). The hole stays in the ledge.
+- **Wall drag (wall slide):** starts automatically when steering into any wall in the air. **Letting go drops you straight down; jumping (swipe up / ↑) kicks you off the wall.** The jump is graded like a release, so jumping in the gold zone gives a stronger kick. A wall jump keeps its sideways momentum until it reaches a wall or the ground ("jump flight").
+- **Ground jump:** swipe up (hold the finger for full height) or ↑. It reaches about 3.5 tiles, and releasing early gives a short hop. Coyote time (0.09 s after walking off an edge) and jump buffering (0.12 s before landing) make it forgiving. It isn't a lifecycle move (no perfect window).
+- **Burrow** picks its direction from context:
+  - **Pushing into soft dirt** (wall sliding, or steering into it on the ground): **tunnel sideways**.
+  - **Standing on soft dirt or a ledge:** dig down.
+  - **Standing on hard dirt or rock:** "TOO HARD".
+  - In both burrows, the perfect window opens right after you break into open space ("clean exit": a speed burst). Letting go inside the ground leaves you in the hole you dug.
 - **Dive into the ground:** still holding Dive when you land turns into Burrow, which makes it a Drill.
 - **Hard landings:** impacts above `hardLandingSpeed` show "OOF" and shake the screen. Damage comes in M4.
 
@@ -86,9 +92,9 @@ Rules of thumb:
 
 **How the M3 chains work (as built):**
 - **Linking:** a move links to the previous one if it starts within the link window after a release, or at any point during a wall jump's flight. The `CHAINS` table in `src/chains.js` lists each chain's sequence, its perfect-release requirement and its context flag. The first match wins. Effects live in `CHAIN_EFFECTS`.
-- **Wall Burrow:** after a wall jump, dive (or swipe down) into the *opposite* wall. The rabbit tunnels down inside the wall and passes behind any ledges there. On release it bursts back out sideways; a perfect release gives a stronger burst. This is a stand-in until real tunnels and hidden rooms arrive in M6. Swiping down on a wall outside this chain just dives.
-- **Drill:** extra layers = 1 per 140 u/s of impact speed above terminal velocity, up to 5. Each layer punched slows the rabbit a little.
-- **Parachute Snap:** stops the fall instantly. Its shockwave breaks **fragile ledges** (cracked, paler) within 320 u below. Fragile ledges were added early for this.
+- **Wall Burrow:** after a wall jump, dive (or swipe down) into the *opposite* wall. The rabbit tunnels sideways through it, through hard dirt too; only rock stops it. A perfect release on breaking out gives a big burst. Outside this chain, only soft dirt can be tunnelled.
+- **Drill:** punches down through tile rows, hard dirt included: 1 row + 1 per 120 u/s of impact speed above terminal velocity, up to 6. Rock stops it, a pad bounces it, and its own landing never hurts.
+- **Parachute Snap:** stops the fall instantly. Its shockwave breaks **fragile ledges** (cracked, paler) within 320 u below and 6 columns either side.
 - **Soft Landing:** same sequence as Parachute Snap, but chosen when ground is within 160 u below. It cuts the fall to a safe speed, so the landing isn't hard.
 - The HUD shows **CHAIN xN** while a chain is live, and the first use of each chain in a run shows **NEW!**. Points come in M5.
 
@@ -140,13 +146,21 @@ Rules of thumb:
 
 **Landing damage (proposed):** impact damage scales with vertical speed at contact; above a threshold it hurts unless the landing is part of a protective chain.
 
-**As built (M4):**
-- **Spiked ledges:** landing on one costs 1 HP and bounces you up and toward the ledge's nearest open edge, so you get thrown clear. Burrowing (Drill) goes through spikes safely. Close-call bonuses come with scoring in M5.
-- **Thorn balls ("harmful objects"):** some sit still and some patrol sideways. They patrol faster deeper down. Spear destroying them comes in M6.
-- **Rockfalls:** cracked patches on a wall. Rocks fall from above when you touch the patch, or, for `pass` patches, when you fall past its top. A blinking "▼ ! ▼" warns before they arrive. Rocks fall faster than baseline (430 u/s, more deeper down), so you outrun them with Dive or dodge out of their lane. They smash fragile ledges and shatter on anything else.
-- **Bouncers:** *up-pads* (pink mushrooms) are solid and launch you upward with no landing damage, and a drill that hits one bounces off. *Down-rings* (dashed blue) speed up your fall as you pass through. Diving through one is a **SPEED BURST** (1.3× dive speed plus momentum carry).
-- **Carrots:** restore 1 HP and are rare (12% of carrot slots).
-- Sideways sections are still M6.
+**As built (tile terrain):** the world is a grid of 18-unit tiles, 20 across the screen (`src/level/tiles.js`).
+
+| Tile | Behaviour |
+|---|---|
+| Dirt (brown, grass on top) | Solid. Only Drill or Wall Burrow get through it. |
+| **Soft dirt** (tan, speckled) | Solid. Dig down into it or tunnel sideways through it. Used for shortcuts, secret pockets and walls you can punch through. |
+| Rock (grey) | Unbreakable. The two border columns are rock. |
+| Ledge (thin slab) | One-way: land on it, jump up through it, dig down through it. |
+| Fragile ledge (pale, cracked) | One-way. Broken by Parachute Snap, rocks or digging. |
+| Spikes | Solid. Landing on top costs 1 HP and throws you toward the nearer end of the strip. Drill goes through safely. |
+| Pad (pink mushroom) | Solid. Bounces you up with no landing damage. |
+| Loose rocks (grey, cracked) | A rockfall source: when you pass beneath it (within 4 columns), it crumbles and drops a staggered burst of rocks, with a blinking "▼ ! ▼" warning. Rocks smash fragile ledges and shatter on anything else. |
+
+- **Entities:** thorn balls (still, or patrolling their row; faster deeper down), down-rings (diving through one is a **SPEED BURST**) and carrots (+1 HP, rare).
+- **Safety net:** if the rabbit ever ends up inside a wall, it's popped out to the nearest free spot. Clipping a tile corner by up to 6 u slides you past it instead of catching.
 
 ---
 
@@ -156,16 +170,17 @@ Portrait orientation, two thumbs. Moves are context-sensitive so there are only 
 
 | Input | Result |
 |---|---|
-| Hold left / right half of screen | Steer |
+| Hold left / right half of screen | Steer / run |
+| Swipe up (hold for full height) | Jump; on a wall, wall jump |
 | Hold both halves | Ears (lift one thumb to steer while gliding) |
-| Swipe down + hold | **In air:** Dive. **On ledge or wall:** Burrow |
-| Steer into a wall on contact | Wall drag (automatic) |
-| Swipe away from wall, or lift | Wall jump |
+| Swipe down + hold | **In air:** Dive. **On the ground:** dig down. **Pushing into soft dirt:** tunnel sideways |
+| Steer into a wall in the air | Wall slide (automatic) |
+| Lift the steering finger while sliding | Drop straight down |
 | Lift finger(s) | Release the current move (perfect timing = lift in window) |
 
-As built: a swipe is 24 CSS px within 0.22 s (`config.input`). A finger that swipes down stops steering and holds Dive/Burrow until it's lifted. Ears stay open while any steering finger is still down.
+As built: a swipe is 24 CSS px within 0.22 s (`config.input`). A finger that swipes down holds Dive/Burrow, and a finger that swipes up holds the jump; either way it stops steering until it's lifted. Ears stay open while any steering finger is still down. (The earlier "swipe sideways to wall jump" gesture was removed.)
 
-Desktop fallback for testing: arrow keys / A-D to steer, Space = ears, S/Down = dive/burrow, W/Up = wall jump.
+Desktop fallback for testing: arrow keys / A-D to steer, W/Up = jump, Space = ears, S/Down = dive/burrow.
 
 Feedback for perfect releases: screen flash, particle burst, sound sting, and haptic buzz (`navigator.vibrate` where supported).
 
@@ -180,15 +195,20 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 - Chunks are recycled (spawn ahead, despawn behind) to keep memory flat for an infinite run.
 - Seeded RNG so a run can be replayed for debugging.
 
-**As built (M4):**
-- **Chunk data** lives in `src/level/chunks.js`: 16 chunks across tiers 0–3. Coordinates span the inner shaft (0–324).
-- **Entry and exit lanes:** the shaft is split into lanes L, C and R. Each chunk lists `entry` (lanes that are safe to fall into at the top) and `exit` (lanes you leave through). A chunk can follow another only if its entry covers the other's exit.
-- **Mirroring:** chunks are flipped left-to-right at random, so each one only needs authoring for one side.
-- **Optional hazards:** values like `spikes: 0.5` and `fragile: 0.3` are chances, scaled by difficulty; `true` means always. A `slot` is an optional thorn or carrot, filled by chance.
-- **Difficulty:** `d` goes from 0 to 1 by 1500 m. Tiers unlock at 0, 100, 300 and 650 m, and the newest unlocked tier is weighted 2.5× more likely. As `d` rises, so do optional-hazard chances, slot fill rate (20% → 75%), thorn patrol speed and rock speed, while the gap between chunks shrinks from 110 to 30 u. All of this is in `config.difficulty`.
-- **Randomness:** layout uses the seeded RNG. Runtime randomness, such as rock sizes and positions, uses a second RNG derived from the seed, so player behaviour never changes the layout.
-- **Recycling:** everything more than 300 u above the screen is removed. In a 6-minute soak test (2,000+ m) there were never more than about 13 ledges, 9 thorns and 13 rocks alive at once.
-- **Not yet:** narrow chimneys (needed for Ricochet) require wall-drag on solid blocks, so they wait for M6.
+**As built (tunnel redesign):**
+- **Chunks as ASCII maps** in `src/level/chunks.js`: 19 chunks across tiers 0–3, each row 18 characters (the shaft between the rock borders). The legend is at the top of the file: `#` dirt, `S` soft, `=` ledge, `~` fragile, `^` spikes, `P` pad, `K` loose rocks, `o`/`O` thorn (still/patrolling), `v` ring, `c`/`?` carrot/thorn slots, and `!`/`%` spikes/fragile by chance.
+- **Connectors:** the top row's openings are the entry and the bottom row's openings are the exit. Between two chunks the generator carves a short drop out of the exit, then a 3-row sideways tunnel spanning both openings. So chunks never need to line up, and the route keeps turning left and right. Long connector runs can get a patrolling thorn.
+- **Authoring rules:**
+  - Passages must be at least 2 tiles wide and 2 tall (the rabbit is 22×26).
+  - Rooms you're meant to jump in need about 5 rows of height.
+  - Spikes need room to steer around.
+  - Chunks are mirrored at random, and the same chunk never appears twice in a row.
+- **Difficulty:** `d` goes from 0 to 1 by 1500 m. Tiers unlock at 0, 100, 300 and 650 m, and the newest unlocked tier is weighted 2.5× more likely. As `d` rises, so do chance-tile and slot odds, thorn and rock speed, and connector-run thorns, while the straight drop before each connector shrinks from 3 rows to 1.
+- **Randomness:** layout uses the seeded RNG. Runtime randomness, such as rocks, uses a second RNG, so player behaviour never changes the layout.
+- **Recycling:** rows and entities more than 300 u above the screen are dropped.
+- **Testing:**
+  - A flood-fill check (with room for the rabbit) confirms 200 generated levels each connect for 2,400 rows.
+  - A pathfinding bot that walks, jumps, digs and tunnels reaches about 1,000–1,450 m in 5–6 minutes on every seed tried. Its remaining stalls are spots that need human air-control or jump timing (bouncing off `padPit`'s pad, jumping spike strips).
 
 ---
 
@@ -217,7 +237,7 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 - World units: the shaft is always 360 units wide and scaled to the screen width, so every phone sees the same width. Height varies with aspect ratio. On desktop the play area is letterboxed to portrait (`world.maxAspect`).
 - `src/rng.js` holds the seeded RNG and `src/render.js` the world drawing (these files weren't in the original structure).
 - M1 ledges come from a simple seeded row generator (`src/level/generator.js`). The data-driven chunk system replaces it in M4.
-- Ledges are solid on all sides. The rabbit lands on them and runs faster on the ground than it drifts in the air (`groundSteerSpeed`).
+- Ledges were solid on all sides in M1 (now one-way tiles; see §5). The rabbit runs faster on the ground than it drifts in the air (`groundSteerSpeed`).
 - A "Tap to drop" title screen keeps the run from starting before the player is ready.
 - Holding both halves of the screen cancels steering for now. It becomes Ears in M2.
 
