@@ -60,8 +60,8 @@ export const CONFIG = {
     recoveryTime: 0.45,       // can't act after a move times out
 
     ears: {
-      maxHold: 1.3,
-      perfect: [0.85, 1.0],
+      maxHold: 1.8,           // sticky: open until you tap both halves again (or this runs out)
+      perfect: [1.1, 1.35],
       fallSpeed: 100,         // ~0.3x terminal
       brake: 1700,            // how hard ears slow the fall
       steerSpeed: 520,        // ~2.5x air steer
@@ -86,6 +86,7 @@ export const CONFIG = {
       perfectJumpVy: -280,
       jumpFlight: 1.4,        // max seconds a wall jump counts as "in flight" for chains
       timeoutPush: 60,        // slip away from the wall on timeout
+      awayDelay: 0.25,        // steering away drops you after this long (longer than a swipe takes)
     },
     burrow: {
       maxHold: 1.4,
@@ -200,6 +201,7 @@ export const CONFIG = {
     swipeTime: 0.22,      // seconds after touch-down a swipe can still be detected
     swipeAxisBias: 1.2,   // dominant axis must be this much larger than the other
     tapTime: 0.22,        // a touch shorter than this (and not a swipe) is a tap
+    earsChord: 0.18,      // both halves pressed within this of each other = ears toggle
   },
 
   fx: {

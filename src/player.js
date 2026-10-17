@@ -99,7 +99,7 @@ export class Player {
     this.coyote = this.grounded ? P.coyoteTime : Math.max(0, this.coyote - dt);
     if (input.steer !== 0) this.lastSteer = { dir: input.steer, time: this.time };
 
-    this.handleInput(input, world);
+    this.handleInput(input, world, dt);
     if (this.move) {
       this.move.t += dt;
       if (this.move.t >= this.move.maxHold) this.endMove(world, 'timeout');
@@ -143,7 +143,7 @@ export class Player {
 
   // ---------------------------------------------------------------- input
 
-  handleInput(input, world) {
+  handleInput(input, world, dt) {
     if (this.recover > 0) return;
 
     // Starts first, so e.g. a swipe-down on a wall cancels the drag instead
@@ -152,7 +152,11 @@ export class Player {
       if (this.grounded || this.touchWall) this.requestBurrow(world);
       else this.request('dive', world);
     }
-    if (input.earsPressed) this.request('ears', world);
+    // Ears toggle: tap both halves (or Space) to open, again to close.
+    if (input.earsPressed) {
+      if (this.move?.name === 'ears') this.endMove(world, 'release');
+      else this.request('ears', world);
+    }
 
     // Jump: wall jump while dragging, otherwise a ground jump (buffered + coyote time).
     if (input.jumpPressed) this.jumpBuffer = P.jumpBuffer;
@@ -172,10 +176,14 @@ export class Player {
 
     const m = this.move;
     if (!m) return;
-    if (m.name === 'ears' && !input.earsHeld) this.endMove(world, 'release');
-    else if ((m.name === 'dive' || m.name === 'burrow') && !input.downHeld) this.endMove(world, 'release');
+    if ((m.name === 'dive' || m.name === 'burrow') && !input.downHeld) this.endMove(world, 'release');
     // Wall slides are sticky: you stay on until you jump (above), tap, or steer away.
-    else if (m.name === 'wall' && (input.tap || input.steer === -m.side)) this.endMove(world, 'release');
+    // Steering away has to be held briefly, so the finger that starts a swipe-up
+    // on the far half of the screen doesn't drop you before the jump registers.
+    else if (m.name === 'wall') {
+      m.away = input.steer === -m.side ? (m.away ?? 0) + dt : 0;
+      if (input.tap || m.away >= M.wall.awayDelay) this.endMove(world, 'release');
+    }
   }
 
   groundJump(world) {

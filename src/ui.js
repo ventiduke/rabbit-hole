@@ -143,7 +143,7 @@ export function drawGameOver(ctx, viewH, { score, isBest, canRetry, time }) {
 const CONTROLS = [
   ['Hold left / right', 'steer · run'],
   ['Swipe up', 'jump · wall jump'],
-  ['Hold both halves', 'ears (glide)'],
+  ['Tap both halves', 'ears on / off (glide + steer)'],
   ['Swipe down + hold', 'dive · dig down'],
   ['…pushing into soft dirt', 'tunnel through'],
   ['Steer into a wall', 'wall slide (sticks) · tap to drop'],
@@ -187,7 +187,7 @@ export function drawTitle(ctx, viewH, best) {
   ctx.font = '13px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(242, 235, 226, 0.45)';
   ctx.fillText('Chains: Drill · Parachute Snap · Soft Landing · Wall Burrow', rx, y + 14);
-  ctx.fillText('Keys: ← → steer · ↑ jump · Space ears · ↓ dive / burrow · R restart', rx, y + 36);
+  ctx.fillText('Keys: ← → steer · ↑ jump · Space ears on/off · ↓ dive / burrow · R restart', rx, y + 36);
 }
 
 // Shown over everything while the phone is held upright.

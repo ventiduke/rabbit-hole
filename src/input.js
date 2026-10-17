@@ -94,13 +94,20 @@ export function createInput(canvas) {
       const left = tLeft || has('ArrowLeft', 'KeyA');
       const right = tRight || has('ArrowRight', 'KeyD');
       const both = tLeft && tRight;
+      // Ears: both halves pressed together (a two-thumb tap). Overlapping thumbs
+      // while switching steering direction don't count: the two presses must
+      // land within earsChord of each other.
+      let chord = false;
+      if (both && !prevBoth) {
+        const newest = (side) => Math.max(...steerTouches.filter((p) => p.side === side).map((p) => p.t0));
+        chord = Math.abs(newest('left') - newest('right')) / 1000 <= I.earsChord;
+      }
 
       const frame = {
         left,
         right,
         steer: (right ? 1 : 0) - (left ? 1 : 0),
-        earsPressed: queued.ears || (both && !prevBoth),
-        // Ears stay open while any steering finger is down (lift one to steer).
+        earsPressed: queued.ears || chord,
         earsHeld: steerTouches.length > 0 || has('Space'),
         downPressed: queued.down,
         downHeld: all.some((p) => p.kind === 'down') || has('KeyS', 'ArrowDown'),
