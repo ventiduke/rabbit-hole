@@ -78,7 +78,7 @@ Perfect releases function like fighting-game cancel windows: they are the main w
 - **Cancelling:** starting a move while another is held ends the current one, graded like a release. So cancelling inside the perfect window counts as perfect. On keyboard, holding ↓ and then pressing Space in the gold zone gives Parachute Snap.
 - **Perfect release:** gives a flash, particles, a "PERFECT" label, a haptic buzz and 0.6 s of momentum carry (sideways speed from Ears, fall speed from Dive). The chain link window also grows from 0.2 s to 0.35 s.
 - **Timeout:** shows "TOO LONG", followed by 0.45 s of recovery with no moves and no steering.
-- **Wall drag (wall slide):** starts automatically when steering into any wall in the air, and it's **sticky**: you keep sliding with no input. **Jumping (swipe up / ↑, anywhere on screen) kicks you off the wall. A tap anywhere, or steering away for a quarter-second, drops you off.** The delay is there so the finger that starts a swipe-up on the far half doesn't drop you before the jump registers. If it runs out (1.8 s) you slip off with a short recovery. The jump is graded like a release, so jumping in the gold zone gives a stronger kick. A wall jump keeps its sideways momentum until it reaches a wall or the ground ("jump flight").
+- **Wall drag (wall slide):** starts automatically when steering into any wall in the air. It also starts **with no steering** when you fly into a wall: the far wall during a wall jump's flight, or any wall hit at 200 u/s or more (`moves.wall.autoGrabSpeed`; normal steering tops out at 210, so it's mostly for momentum). A dive into the far wall during a wall jump still becomes Wall Burrow instead. The slide is **sticky**: you keep sliding with no input. **Jumping (swipe up / ↑, anywhere on screen) kicks you off the wall. A tap anywhere, or steering away for a quarter-second, drops you off.** The delay is there so the finger that starts a swipe-up on the far half doesn't drop you before the jump registers. If it runs out (1.8 s) you slip off with a short recovery. The jump is graded like a release, so jumping in the gold zone gives a stronger kick. A wall jump keeps its sideways momentum until it reaches a wall or the ground ("jump flight").
 - **Ground jump:** swipe up (hold the finger for full height) or ↑. It reaches about 3.5 tiles, and releasing early gives a short hop. Coyote time (0.09 s after walking off an edge) and jump buffering (0.12 s before landing) make it forgiving. It isn't a lifecycle move (no perfect window).
 - **Burrow** picks its direction from context:
   - **Pushing into soft dirt** (wall sliding, or steering into it on the ground): **tunnel sideways**.
@@ -207,7 +207,7 @@ Rules of thumb:
 | Swipe up (hold for full height) | Jump; on a wall, wall jump |
 | Tap both halves together | Ears on / off. While gliding, steer normally with one thumb. Closing them in the gold zone is a perfect release |
 | Swipe down + hold | **In air:** Dive. **On the ground:** dig down. **Pushing into soft dirt:** tunnel sideways |
-| Steer into a wall in the air | Wall slide (automatic) |
+| Steer into a wall in the air, or hit one fast | Wall slide (automatic) |
 | Tap (or steer away) while sliding | Drop off the wall (the slide sticks without holding) |
 | Lift finger(s) | Release the current move (perfect timing = lift in window) |
 

@@ -130,7 +130,7 @@ export const DRILLS = [
   },
   {
     id: 'ricochet', name: 'Ricochet', tag: 'slide · ↑ · catch ×2', bottom: 1800,
-    how: 'Slide, SWIPE ↑, and catch the far wall. Do it twice in a row',
+    how: 'Slide, SWIPE ↑ (you stick to the far wall), then SWIPE ↑ again. Twice in a row',
     build(b) {
       b.shaft(400, 600);
       b.player(402, 40);

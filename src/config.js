@@ -79,7 +79,8 @@ export const CONFIG = {
     wall: {
       maxHold: 1.8,           // sticky: you slide until you jump, tap, steer away, or this runs out
       perfect: [1.1, 1.35],
-      minFallSpeed: -40,      // can grab once vy is above this
+      minFallSpeed: -40,      // can grab once vy is above this (steering into the wall)
+      autoGrabSpeed: 200,     // hitting a wall this fast grabs it with no steering (as does a wall jump's far wall)
       fallSpeed: 135,         // ~0.4x terminal
       brake: 1800,
       jumpVx: 420,

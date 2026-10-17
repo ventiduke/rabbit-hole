@@ -44,6 +44,7 @@ export class Player {
     this.ground = null;     // { ledge } | { block } we're standing on
     this.touchWall = 0;     // -1 / 1 when pressed against a wall
     this.wallContact = 0;   // same, but only while steering into it
+    this.wallImpact = 0;    // speed we hit the wall we touch at (0 if moving away / not touching)
     this.lastSteer = { dir: 0, time: -1 };
     this.lastImpact = 0;    // vertical speed at last landing
     this.justLanded = 0;    // impact speed if we landed this step
@@ -335,7 +336,7 @@ export class Player {
       chain,
       ...opts,
     };
-    if (name === 'wall') this.move.side = this.wallContact;
+    if (name === 'wall') this.move.side = this.wallContact || this.touchWall;
     if (name === 'ears' || name === 'dive') {
       this.jumping = false;
       world.fx.sfx(name);
@@ -475,6 +476,7 @@ export class Player {
     this.unstick(geo);
     const wasGrounded = this.grounded;
     if (this.ground?.block) this.leaveGround(); // re-found by stepY while we stand on it
+    const vx0 = this.vx;
     const n = Math.max(1, Math.ceil((Math.max(Math.abs(this.vx), Math.abs(this.vy)) * dt) / 6));
     for (let i = 0; i < n; i++) {
       if (this.ground?.ledge) this.slideStep(dt / n, geo);
@@ -485,6 +487,8 @@ export class Player {
       this.clampToWalls(geo);
     }
     this.updateContacts(steer, geo);
+    // How fast we were going into the wall we're now touching (stepX / clampToWalls zero vx).
+    this.wallImpact = this.touchWall && Math.sign(vx0) === this.touchWall ? Math.abs(vx0) : 0;
   }
 
   // Riding a ledge: follow its surface; run off an end and you launch along its slope.
@@ -744,11 +748,14 @@ export class Player {
       this.requestBurrow(world);
     }
 
-    // Wall drag: automatic when steering into a wall in the air.
+    // Wall drag: automatic when steering into a wall in the air, or when you
+    // fly into one (the far wall of a wall jump, or any wall hit at speed).
     m = this.move;
     if (m?.name === 'wall' && this.touchWall !== m.side) this.endMove(world, 'context');
+    const slammed = this.touchWall && (this.wallImpact >= M.wall.autoGrabSpeed ||
+      (this.jumpFlight > 0 && this.touchWall !== this.lastJumpFrom));
     if ((!m || m.name === 'ears') && !this.grounded && this.recover <= 0 &&
-        this.wallContact && this.vy > M.wall.minFallSpeed) {
+        (slammed || (this.wallContact && this.vy > M.wall.minFallSpeed))) {
       this.request('wall', world);
     }
 
