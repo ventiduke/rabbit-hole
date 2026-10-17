@@ -16,6 +16,7 @@
 //   rockfall(x, y, w)            loose rocks under an overhang; drop when you pass beneath
 //   slot(x, y, kinds)            optional 'thorn' / 'carrot', filled by difficulty
 //   gem(x, y)                    points pickup (put them somewhere worth the detour)
+//   sign(x, y, text, color)      painted hint on the cave wall (combo sections say what they want)
 //
 //   diff   tier (0-3), unlocks with depth (config.difficulty.tierDepths)
 //   h      section height        weight  optional pick weight (default 1)
@@ -29,6 +30,7 @@ const ring = (x, y) => ({ type: 'ring', x, y });
 const rockfall = (x, y, w) => ({ type: 'rockfall', x, y, w });
 const slot = (x, y, kinds) => ({ type: 'slot', x, y, kinds });
 const gem = (x, y) => ({ type: 'gem', x, y });
+const sign = (x, y, text, color) => ({ type: 'sign', x, y, text, color });
 
 export const CHUNKS = [
   // ---- Tier 0: long falls, ledges that send you left or right
@@ -113,6 +115,65 @@ export const CHUNKS = [
     gem(0.43, 150), gem(0.5, 150), gem(0.57, 150),
     slot(0.5, 110, ['carrot']),
     ledge(0.04, 40, 0.28, 110),
+  ] },
+
+  // ---- Combo sections: each pays off one chain with a stash of gems, and
+  // always has an easy way past for anyone who doesn't do it. Stashes in a
+  // closed vault have a soft floor, so you dig out the bottom.
+
+  // Spear (or Drill) through the dirt roof of a vault. A ledge flings you at
+  // the wall for the slide; wall jump, then swipe down mid-air. The stash is a
+  // grid, so whatever line you cut through it collects a row of gems.
+  { id: 'spearVault', diff: 1, minW: 600, weight: 1.3, h: 510, items: [
+    sign(0.3, -30, 'SLIDE · ↑ · ↓  SPEAR', '#ff9a4a'),
+    ledge(0.95, 0, 0.45, 90),
+    block(0.18, 330, 0.36, 36, 'dirt'),        // the roof: land on it and walk off, or break in
+    block(0.18, 366, 0.03, 110, 'rock'),
+    block(0.51, 366, 0.03, 110, 'rock'),
+    block(0.18, 476, 0.36, 34, 'soft'),
+    ...[392, 422, 452].flatMap((y) => [0.25, 0.3, 0.35, 0.4, 0.45].map((x) => gem(x, y))),
+  ] },
+
+  // Parachute Snap: a fragile roof sheds you off to the side. Dive above it and
+  // snap your ears open to break it, then drop into the stash.
+  { id: 'snapRoof', diff: 1, minW: 600, weight: 1.3, h: 340, items: [
+    sign(0.5, -110, 'DIVE · ↑ IN GOLD  SNAP', '#ff7ab8'),
+    ledge(0.2, 150, 0.5, 60, { kind: 'fragile' }),
+    ledge(0.5, 60, 0.8, 150, { kind: 'fragile' }),
+    block(0.34, 108, 0.03, 200, 'rock'),
+    block(0.63, 108, 0.03, 200, 'rock'),
+    block(0.34, 308, 0.32, 32, 'soft'),
+    gem(0.5, 200), gem(0.5, 235), gem(0.5, 270), gem(0.43, 270), gem(0.57, 270),
+  ] },
+
+  // Ricochet down a chimney: gems hug alternate walls, so a wall slide gets
+  // half of them and bouncing side to side gets them all. Or go around it.
+  { id: 'chimney', diff: 1, minW: 600, weight: 1.3, h: 560, items: [
+    sign(0.5, -30, 'SLIDE · ↑ · ↑  RICOCHET', '#c7a6ff'),
+    block(0.36, 0, 0.06, 540, 'rock'),
+    block(0.58, 0, 0.06, 540, 'rock'),
+    gem(0.437, 90), gem(0.563, 170), gem(0.437, 250), gem(0.563, 330), gem(0.437, 410), gem(0.563, 490),
+  ] },
+  // The same in a narrow shaft: the whole shaft is the chimney.
+  { id: 'shaftLadder', diff: 1, minW: 300, maxW: 600, weight: 1.3, h: 520, items: [
+    sign(0.5, -30, 'RICOCHET', '#c7a6ff'),
+    gem(0.05, 80), gem(0.95, 180), gem(0.05, 280), gem(0.95, 380), gem(0.05, 480),
+  ] },
+
+  // Wall Burrow into a sealed room: slide the pillar, wall jump toward the
+  // dirt wall, swipe down on the way and burrow straight through it. Only the
+  // lower part of the wall is dirt, so you come out level with the stash.
+  // A ledge on the roof slides you back to the middle.
+  { id: 'burrowRoom', diff: 2, minW: 600, weight: 1.3, h: 400, items: [
+    sign(0.32, -30, 'SLIDE · ↑ · ↓ INTO DIRT  WALL BURROW', '#7fd1ff'),
+    block(0.3, 0, 0.04, 330, 'rock'),
+    ledge(1, -24, 0.64, 26),
+    block(0.68, 30, 0.07, 120, 'rock'),
+    block(0.68, 150, 0.07, 180, 'dirt'),
+    block(0.97, 0, 0.03, 330, 'rock'),
+    block(0.75, 330, 0.22, 30, 'soft'),
+    gem(0.79, 220), gem(0.85, 220), gem(0.91, 220),
+    gem(0.79, 290), gem(0.85, 290), gem(0.91, 290),
   ] },
 
   // ---- Tier 2: rockfalls, thorn fields, soft walls

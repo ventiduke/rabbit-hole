@@ -96,6 +96,14 @@ export function interactHazards(player, world) {
 
 export function drawHazards(ctx, level) {
   const t = level.time;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  for (const s of level.signs) {
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = s.color ?? '#f2ebe2';
+    ctx.fillText(s.text, s.x, s.y);
+  }
+  ctx.globalAlpha = 1;
   for (const r of level.rings) {
     const cx = r.x + r.w / 2;
     const cy = r.y + r.h / 2;

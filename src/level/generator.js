@@ -50,6 +50,7 @@ export class LevelGenerator {
     this.rings = [];     // { x, y, w, h }
     this.carrots = [];   // { x, y }
     this.gems = [];      // { x, y }
+    this.signs = [];     // { x, y, text, color } hints painted on the cave
     this.rockZones = []; // { x, y, w, fired }
     this.rocks = [];     // { x, y, w, h, vy, delay, zone }
     this.warnings = [];  // rockfall telegraphs
@@ -73,6 +74,7 @@ export class LevelGenerator {
     this.rings = this.rings.filter(keep);
     this.carrots = this.carrots.filter(keep);
     this.gems = this.gems.filter(keep);
+    this.signs = this.signs.filter(keep);
     this.rockZones = this.rockZones.filter((z) => z.y + 600 > top);
     this.world.prune(top);
   }
@@ -158,6 +160,9 @@ export class LevelGenerator {
         }
         case 'gem':
           this.gems.push({ x: X(it.x), y });
+          break;
+        case 'sign':
+          this.signs.push({ x: X(it.x), y, text: it.text, color: it.color });
           break;
         case 'slot':
           this.fillSlot(it.kinds, X(it.x), y, d);

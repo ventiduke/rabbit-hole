@@ -18,6 +18,7 @@ import {
   drawPracticeMenu, drawPracticeHud, titleButtons, practiceCards, hit, BACK, OVER_MENU,
 } from './ui.js';
 import { DRILLS, PracticeSession, loadCleared } from './practice.js';
+import { createTuner } from './tune.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -30,6 +31,8 @@ const fixedSeed = params.has('seed') ? Number(params.get('seed')) >>> 0 : null;
 const forceChunk = params.get('chunk'); // repeat one section, e.g. ?chunk=cascade
 const forceBand = params.get('band');   // cavern width every time: narrow | wide | normal
 const debug = params.has('debug');      // fps / seed / tier / state readout
+// ?tune: live tuning sliders (applies saved tweaks before anything reads CONFIG).
+const tuner = params.has('tune') ? createTuner({ onRestart: () => restartRun(), onClose: () => input.clear() }) : null;
 
 const player = new Player();
 const camera = new Camera();
@@ -181,6 +184,11 @@ canvas.addEventListener('pointerdown', (e) => {
   }
 });
 
+function restartRun() {
+  if (mode === 'practice' && session) buildPractice();
+  else startEndless();
+}
+
 function newRun() {
   level = new LevelGenerator(fixedSeed ?? randomSeed(), forceChunk, forceBand);
   player.reset();
@@ -203,6 +211,7 @@ function step(dt) {
     frame.pressed = false;
     swallowPress = false;
   }
+  if (tuner?.open) return; // paused while tuning
   if (scene === 'title' || scene === 'practiceMenu') return;
   if (scene === 'over') {
     fx.update(dt);
@@ -210,11 +219,7 @@ function step(dt) {
     if (frame.restart) startEndless();
     return;
   }
-  if (frame.restart) {
-    if (mode === 'practice') buildPractice();
-    else newRun();
-    return;
-  }
+  if (frame.restart) return restartRun();
   fx.update(dt);
   if (mode === 'practice') return stepPractice(dt, frame);
   runTime += dt;

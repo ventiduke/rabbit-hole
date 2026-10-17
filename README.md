@@ -26,10 +26,16 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 - **Playtest follow-ups:**
   - Wall slides are sticky.
   - The cavern's width now varies: thin shafts, and wide stretches that run past the screen edge with a panning camera (§5, §7).
+- **Tuning panel and combo sections (next-steps round):**
+  - **`?tune`** adds a ⚙ button (bottom left). It opens sliders for about 45 feel values: falling, steering, jump, wall slide, ears, dive, perfect windows, chains, camera, level gaps and touch thresholds.
+    - The game pauses while the panel is open. Changes apply immediately and are remembered on that device, but only when the URL has `?tune`; without it the game uses the defaults in `config.js`.
+    - Changed values turn gold, and ↺ resets one. **Copy changes** copies a JSON list of everything you changed (it's also shown in the box at the top, so you can long-press to copy it), ready to paste back as the new defaults. **Restart** starts the run or drill over.
+    - The slider list lives at the top of `src/tune.js`.
+  - **Combo sections:** five Endless sections, each built so one chain pays off with a stash of gems, and each with an easy way past for anyone who doesn't do it. A hint is painted above each one, in that chain's colour. See §7.
 - *Previous iteration, tunnel redesign:* the open shaft with thin ledges became tile terrain with tunnels that keep turning left and right, soft dirt you can tunnel through, a ground jump, and wall slides where letting go drops you and jumping kicks off. See §5–§7. Tested in a mobile-emulated browser and a headless sim (including a pathfinding bot), but not yet on a real phone.
 - **Run locally:** `python3 -m http.server` in the repo root, then open `http://localhost:8000`. ES modules don't load from `file://`.
 - **Deploy:** Settings → Pages → *Deploy from a branch* → `main` / `(root)`. `.nojekyll` is included so files are served as-is.
-- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=secretWall` repeats a single chunk, which is handy when authoring chunks. `?band=narrow` (or `wide` / `normal`) forces every cavern band to that width. `?debug` shows FPS, seed, tier and move state. `window.__game` exposes the player, level, camera and score in the console.
+- **Debug:** `?seed=123` replays a run with that seed. **R** restarts the run. `?chunk=secretWall` repeats a single chunk, which is handy when authoring chunks. `?band=narrow` (or `wide` / `normal`) forces every cavern band to that width. `?debug` shows FPS, seed, tier and move state. `window.__game` exposes the player, level, camera and score in the console. `?tune` opens the live tuning panel (above).
 
 ---
 
@@ -229,14 +235,20 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 - Seeded RNG so a run can be replayed for debugging.
 
 **As built (open cavern):**
-- **Sections** are hand-authored data in `src/level/chunks.js`: 18 sections across tiers 0–3. Coordinates use a fraction of the cavern width for x and units for y.
+- **Sections** are hand-authored data in `src/level/chunks.js`: 27 sections across tiers 0–3. Coordinates use a fraction of the cavern width for x and units for y.
   - Helpers: `ledge(x1, y1, x2, y2, {kind | spikes | fragile})`, `block(x, y, w, h, kind)`, `thorn`, `ring`, `rockfall`, and `slot` (an optional thorn or carrot).
   - Examples: deflect (one long slope), funnel, cascade (zig-zag slopes), drift (just rings), soft shelf, spike landing, pad pop, pillars, thorn gate, fragile stack, overhang (rockfall), spike pit, thorn field, soft wall, gauntlet, chute and rock slide.
+  - **Combo sections** (weighted 1.3×). Each has a painted hint (`sign(x, y, text, color)`), a gem stash the chain gets you into, and an easy way past. Closed stashes have a soft floor, so you dig out the bottom.
+    - **Spear Vault** (tier 1): a sloped ledge flings you at the wall. Slide, wall jump, then swipe down to Spear through a dirt roof into a 3×5 grid of gems (a Drill works too). Landing on the roof and walking off is the easy way.
+    - **Snap Roof** (tier 1): a fragile ^-shaped roof sheds you off to either side. Dive from high above and Parachute Snap it to drop into the stash underneath.
+    - **Chimney** (tier 1): two rock pillars with gems hugging alternate walls. A wall slide gets half of them, Ricochet gets them all, and you can just fall past outside it. In narrow shafts, **Shaft Ladder** does the same using the shaft's own walls.
+    - **Burrow Room** (tier 2): a rock pillar to slide on and, across from it, a room sealed by a wall that's rock on top and dirt below. Wall jump, swipe down on the way, and Wall Burrow through into the stash. A sloped ledge on the room's roof slides you back to the middle.
 - **Gaps:** sections are separated by **long open falls**, 520–820 u at the surface shrinking to 300–520 u at full difficulty (`difficulty.gap`). A gap sometimes holds a drifting thorn (more likely deeper) or a down-ring. Sections are mirrored at random and never repeat back to back.
 - **Difficulty:** `d` goes from 0 to 1 by 2500 m. Tiers unlock at 0, 150, 450 and 1000 m, and the newest unlocked tier is weighted 2.5× more likely. Chance-based spikes and fragile ledges, slot fills, thorn speed and rock speed all scale with `d`.
 - **Randomness:** layout uses the seeded RNG; runtime randomness (rocks) uses a second one. Everything more than 400 u above the screen is recycled.
 - **Testing:**
   - 19 scripted physics scenarios pass: slope slide and launch, landing on a slope, jump-through, wall drop vs jump, dig, too hard, tunnel from the ground and from a wall slide, Drill, Wall Burrow, spikes, pad, hard landing and rockfall.
+  - A headless check runs each combo section, mirrored and not: the combo gets at least 3 gems over a wide range of timings (Spear: slide drops of 0–260 u all work), and simple play from five drop positions gets past every section unhurt.
   - A random-input bot spends about 75–80% of its time airborne and reaches about 2,800–3,100 m in 5 minutes. With damage on, it dies at 400–1,100 m.
 
 ---
