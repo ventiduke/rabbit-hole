@@ -270,6 +270,12 @@ export const CONFIG = {
     ],
   },
 
+  practice: {
+    time: 10,             // seconds per attempt unless a drill sets its own
+    resultTime: 1.2,      // how long NICE! / TRY AGAIN shows before the auto reset
+    storageKey: 'rabbit-hole.cleared',
+  },
+
   audio: {
     volume: 0.6,
     storageKey: 'rabbit-hole.muted',

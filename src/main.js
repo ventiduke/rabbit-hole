@@ -13,7 +13,11 @@ import { Score } from './score.js';
 import { Sound } from './audio.js';
 import { drawWorld } from './render.js';
 import { biomeName } from './biomes.js';
-import { drawHud, drawDebug, drawTitle, drawTouchHints, drawGameOver, drawRotateHint, drawSpeaker, SPEAKER } from './ui.js';
+import {
+  drawHud, drawDebug, drawTitle, drawTouchHints, drawGameOver, drawRotateHint, drawSpeaker, SPEAKER,
+  drawPracticeMenu, drawPracticeHud, titleButtons, practiceCards, hit, BACK, OVER_MENU,
+} from './ui.js';
+import { DRILLS, PracticeSession, loadCleared } from './practice.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -34,7 +38,11 @@ const score = new Score();
 const sound = new Sound();
 fx.sound = sound;
 let level;
-let scene = 'title';  // 'title' | 'play' | 'over'
+let scene = 'title';  // 'title' | 'practiceMenu' | 'play' | 'over'
+let mode = 'endless'; // 'endless' | 'practice'
+let session = null;   // PracticeSession while practising
+let selected = 0;     // highlighted drill in the practice menu
+const tallies = {};   // drill id -> { successes, attempts } this visit
 let overTime = 0;
 let isBest = false;
 let runTime = 0;
@@ -64,25 +72,100 @@ function resize() {
   camera.viewH = canvas.height / scale;
 }
 
-// Audio can only start from a user gesture. The speaker button (title and
-// game-over screens) or M toggles mute; that tap doesn't also start a run.
+// Menus and buttons. Audio can only start from a user gesture, so every tap
+// or key also unlocks it. A tap that hits a button doesn't also count as a
+// press in the game.
 let swallowPress = false;
 canvas.addEventListener('pointerdown', (e) => {
   sound.unlock();
-  if (scene === 'play') return;
   const rect = canvas.getBoundingClientRect();
   const k = CONFIG.world.width / rect.width;
   const x = (e.clientX - rect.left) * k;
   const y = (e.clientY - rect.top) * k;
-  if (x > SPEAKER.x - 10 && y < SPEAKER.y + SPEAKER.size + 10) {
-    sound.toggleMute();
-    swallowPress = true;
+  const viewH = camera.viewH;
+
+  if (scene === 'play') {
+    if (mode === 'practice' && hit(BACK, x, y)) openPracticeMenu();
+    return;
+  }
+  swallowPress = true;
+  if (x > SPEAKER.x - 10 && y < SPEAKER.y + SPEAKER.size + 10) return sound.toggleMute();
+  if (scene === 'title') {
+    const b = titleButtons(viewH);
+    if (hit(b.endless, x, y)) startEndless();
+    else if (hit(b.practice, x, y)) openPracticeMenu();
+  } else if (scene === 'practiceMenu') {
+    if (hit(BACK, x, y)) return void (scene = 'title');
+    const i = practiceCards(viewH, DRILLS.length).findIndex((r) => hit(r, x, y));
+    if (i >= 0) startPractice(i);
+  } else if (scene === 'over') {
+    if (hit(OVER_MENU, x, y)) scene = 'title';
+    else if (overTime > CONFIG.ui.retryDelay) startEndless();
   }
 });
+
 window.addEventListener('keydown', (e) => {
   sound.unlock();
-  if (e.code === 'KeyM') sound.toggleMute();
+  if (e.code === 'KeyM') return sound.toggleMute();
+  if (e.repeat) return;
+  if (scene === 'title') {
+    if (e.code === 'Enter') startEndless();
+    else if (e.code === 'KeyP') openPracticeMenu();
+  } else if (scene === 'practiceMenu') {
+    const n = DRILLS.length;
+    if (e.code === 'ArrowRight') selected = (selected + 1) % n;
+    else if (e.code === 'ArrowLeft') selected = (selected + n - 1) % n;
+    else if (e.code === 'ArrowDown') selected = Math.min(n - 1, selected + 4);
+    else if (e.code === 'ArrowUp') selected = Math.max(0, selected - 4);
+    else if (e.code === 'Enter') startPractice(selected);
+    else if (e.code === 'Escape') scene = 'title';
+  } else if (scene === 'play' && e.code === 'Escape') {
+    if (mode === 'practice') openPracticeMenu();
+    else scene = 'title';
+  } else if (scene === 'over') {
+    if (e.code === 'Escape') scene = 'title';
+    else if (e.code === 'Enter' && overTime > CONFIG.ui.retryDelay) startEndless();
+  }
 });
+
+function startEndless() {
+  mode = 'endless';
+  session = null;
+  newRun();
+  scene = 'play';
+  input.clear();
+}
+
+function openPracticeMenu() {
+  if (session) tallies[session.drill.id] = { successes: session.successes, attempts: session.attempts };
+  session = null;
+  scene = 'practiceMenu';
+}
+
+function startPractice(i) {
+  selected = i;
+  mode = 'practice';
+  session = new PracticeSession(i);
+  const prev = tallies[DRILLS[i].id];
+  if (prev) {
+    session.successes = prev.successes;
+    session.attempts = prev.attempts;
+  }
+  buildPractice();
+  scene = 'play';
+  input.clear();
+}
+
+// (Re)build the current drill: a fixed level with nothing generated.
+function buildPractice() {
+  level = new LevelGenerator(1, null, null, { fixed: true });
+  fx.reset();
+  score.reset();
+  session.build(level, player);
+  camera.snapTo(player, level.world);
+  runTime = CONFIG.ui.hintSeconds; // no touch hints in practice
+  banner = null;
+}
 
 // On phones, the first tap goes fullscreen and tries to lock landscape
 // (works on Android Chrome; iOS ignores it and shows the hint instead).
@@ -120,20 +203,20 @@ function step(dt) {
     frame.pressed = false;
     swallowPress = false;
   }
-  if (scene === 'title') {
-    if (frame.pressed) scene = 'play';
+  if (scene === 'title' || scene === 'practiceMenu') return;
+  if (scene === 'over') {
+    fx.update(dt);
+    overTime += dt;
+    if (frame.restart) startEndless();
     return;
   }
-  if (frame.restart || (scene === 'over' && frame.pressed && overTime > CONFIG.ui.retryDelay)) {
-    newRun();
-    scene = 'play';
+  if (frame.restart) {
+    if (mode === 'practice') buildPractice();
+    else newRun();
     return;
   }
   fx.update(dt);
-  if (scene === 'over') {
-    overTime += dt;
-    return;
-  }
+  if (mode === 'practice') return stepPractice(dt, frame);
   runTime += dt;
   const world = { level, fx, score };
   player.update(dt, frame, world);
@@ -156,6 +239,25 @@ function step(dt) {
   }
 }
 
+function stepPractice(dt, frame) {
+  const world = { level, fx, score };
+  player.update(dt, frame, world);
+  interactHazards(player, world);
+  updateRockfall(dt, player, world, camera);
+  camera.update(dt, player, level.world);
+  level.update(dt, camera);
+  const r = session.update(dt, player, level);
+  if (r === 'success') {
+    sound.play('chain', 3);
+    fx.flashScreen(0.25, '#9be37a');
+    fx.haptic([20, 30, 20]);
+  } else if (r === 'fail') {
+    sound.play('timeout');
+  } else if (r === 'reset') {
+    buildPractice();
+  }
+}
+
 // --- FPS counter (rendered frames per second, averaged over 0.5 s).
 let fps = 0;
 let fpsFrames = 0;
@@ -175,7 +277,8 @@ function render(alpha, frameDt) {
   const depthMeters = Math.max(0, Math.floor((player.y - CONFIG.player.startY) / CONFIG.world.unitsPerMeter));
   fx.drawOverlay(ctx, CONFIG.world.width, camera.viewH);
   const chainLive = player.move || player.chains.isLinked(player.time, player.jumpFlight > 0);
-  if (scene === 'play') {
+  if (scene === 'play' && mode === 'practice') drawPracticeHud(ctx, camera.viewH, session);
+  else if (scene === 'play') {
     drawHud(ctx, {
       score, depthMeters, hp: player.hp, maxHp: CONFIG.player.maxHp,
       chainCount: chainLive ? player.chains.count : 0,
@@ -186,6 +289,7 @@ function render(alpha, frameDt) {
   if (debug) drawDebug(ctx, camera.viewH, { fps, seed: level.seed, tier: tierAt(player.y), state: player.state });
 
   if (scene === 'title') drawTitle(ctx, camera.viewH, score.best);
+  else if (scene === 'practiceMenu') drawPracticeMenu(ctx, camera.viewH, { drills: DRILLS, cleared: loadCleared(), tallies, selected });
   else if (scene === 'over') drawGameOver(ctx, camera.viewH, { score, isBest, canRetry: overTime > CONFIG.ui.retryDelay, time: overTime });
   if (scene !== 'play') drawSpeaker(ctx, sound.muted);
   else if (lastFrame) drawTouchHints(ctx, camera.viewH, Math.min(1, CONFIG.ui.hintSeconds - runTime), lastFrame);
@@ -218,7 +322,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('resize', resize);
 screen.orientation?.addEventListener?.('change', resize);
 
-window.__game = { player, camera, fx, score, sound, get level() { return level; } };
+window.__game = { player, camera, fx, score, sound, startPractice, get level() { return level; }, get session() { return session; } };
 
 resize();
 newRun();

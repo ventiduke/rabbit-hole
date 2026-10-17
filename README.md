@@ -10,6 +10,12 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 
 - **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow), M4 (endless chunk-based level, hazards, health) and M5 (scoring, combo multiplier, high score, start and game-over screens).
 - **Open-cavern landscape redesign (after the tunnel playtest):** the game is now landscape. It's a wide, open cavern with long stretches of falling, broken up by long sloped ledges that catch you and slide you left or right, then launch you off their end. Occasional blocks (pillars, overhangs, soft walls) give the wall and burrow moves something to work with. The tile tunnels were too cramped. See §5–§8.
+- **Practice mode:** the title screen now has **Endless** and **Practice**. Practice is a menu of 11 drills, one per move or combo: Perfect Dive, Wall Jump, Tunnel, Drill, Soft Landing, Parachute Snap, Pop-Up, Ear Catch, Ricochet, Spear and Wall Burrow.
+  - Each drill is a tiny hand-built level with a one-line how-to and a gold-flag goal.
+  - A success, a hit, a miss or running out of time shows **NICE!** or **TRY AGAIN** with the reason, then the drill **resets on its own**.
+  - The HUD shows successes / attempts and your streak. Cleared drills get a ✓ in the menu, remembered in `localStorage`.
+  - Drills are data in `src/practice.js` (`build` lays out the level, `check` judges it), so adding one is a single entry. A headless check confirms every drill can be solved and auto-resets.
+  - Keyboard: Enter for Endless, P for Practice, arrows + Enter in the menu, Esc to go back, R to restart a drill.
 - **M6 (polish):**
   - Four more chains: Ricochet, Spear, Ear Catch and Pop-Up.
   - Synthesised sound, with a mute button and M key.

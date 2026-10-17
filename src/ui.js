@@ -149,12 +149,155 @@ export function drawGameOver(ctx, viewH, { score, isBest, canRetry, time }) {
     }
   });
 
+  drawButton(ctx, OVER_MENU, '☰  Menu', false);
   if (canRetry) {
     ctx.textAlign = 'center';
     ctx.font = 'bold 20px system-ui, sans-serif';
     ctx.fillStyle = `rgba(242, 235, 226, ${0.65 + Math.sin(time * 4) * 0.25})`;
     ctx.fillText('Tap to dig again', W.width / 2, viewH * 0.88);
   }
+}
+
+// ---------------------------------------------------------------- buttons & menus
+// Layout functions are shared by drawing and by tap hit-testing in main.js.
+
+export const hit = (r, x, y) => r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+
+function drawButton(ctx, r, label, primary) {
+  ctx.fillStyle = primary ? '#ffd84a' : 'rgba(242, 235, 226, 0.12)';
+  roundRect(ctx, r.x, r.y, r.w, r.h, 12);
+  ctx.fill();
+  ctx.strokeStyle = primary ? '#ffd84a' : 'rgba(242, 235, 226, 0.5)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = primary ? '#1a110b' : '#f2ebe2';
+  ctx.font = 'bold 20px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 7);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+export function titleButtons(viewH) {
+  const x = W.width * 0.28 - 130;
+  const y = viewH * 0.42 + 60;
+  return {
+    endless: { x, y, w: 260, h: 54 },
+    practice: { x, y: y + 68, w: 260, h: 54 },
+  };
+}
+
+export const BACK = { x: 30, y: 14, w: 120, h: 42 };
+export const OVER_MENU = { x: 30, y: 14, w: 120, h: 42 };
+
+export function practiceCards(viewH, n) {
+  const cols = 4;
+  const rows = Math.ceil(n / cols);
+  const gap = 14;
+  const top = 76;
+  const w = (W.width - 60 - gap * (cols - 1)) / cols;
+  const h = Math.min(110, (viewH - top - 20 - gap * (rows - 1)) / rows);
+  return Array.from({ length: n }, (_, i) => ({
+    x: 30 + (i % cols) * (w + gap),
+    y: top + Math.floor(i / cols) * (h + gap),
+    w,
+    h,
+  }));
+}
+
+export function drawPracticeMenu(ctx, viewH, { drills, cleared, tallies, selected }) {
+  panel(ctx, viewH, 0.85);
+  drawButton(ctx, BACK, '‹  Back', false);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#f2ebe2';
+  ctx.font = 'bold 30px system-ui, sans-serif';
+  ctx.fillText('PRACTICE', BACK.x + BACK.w + 24, 46);
+  ctx.font = '15px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(242, 235, 226, 0.6)';
+  ctx.fillText('Pick a drill. It resets on its own after every try.', BACK.x + BACK.w + 200, 44);
+
+  practiceCards(viewH, drills.length).forEach((r, i) => {
+    const d = drills[i];
+    const done = cleared.has(d.id);
+    ctx.fillStyle = i === selected ? 'rgba(255, 216, 74, 0.18)' : 'rgba(242, 235, 226, 0.07)';
+    roundRect(ctx, r.x, r.y, r.w, r.h, 12);
+    ctx.fill();
+    ctx.strokeStyle = i === selected ? '#ffd84a' : done ? 'rgba(155, 227, 122, 0.7)' : 'rgba(242, 235, 226, 0.25)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#f2ebe2';
+    ctx.font = 'bold 19px system-ui, sans-serif';
+    ctx.fillText(`${i + 1}. ${d.name}`, r.x + 14, r.y + 30);
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(242, 235, 226, 0.65)';
+    ctx.fillText(d.tag, r.x + 14, r.y + 54);
+    const tally = tallies[d.id];
+    if (tally) {
+      ctx.fillStyle = 'rgba(242, 235, 226, 0.5)';
+      ctx.fillText(`${tally.successes} / ${tally.attempts}`, r.x + 14, r.y + r.h - 14);
+    }
+    if (done) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#9be37a';
+      ctx.font = 'bold 22px system-ui, sans-serif';
+      ctx.fillText('✓', r.x + r.w - 14, r.y + 30);
+    }
+  });
+}
+
+// While practising: the drill, how to do it, the tally, the timer, and the result.
+export function drawPracticeHud(ctx, viewH, session) {
+  const d = session.drill;
+  drawButton(ctx, BACK, '‹  Menu', false);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f2ebe2';
+  ctx.font = 'bold 24px system-ui, sans-serif';
+  ctx.fillText(d.name.toUpperCase(), CX, 34);
+  ctx.font = '15px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(242, 235, 226, 0.85)';
+  ctx.fillText(d.how, CX, 58);
+  const limit = d.time ?? CONFIG.practice.time;
+  const left = Math.max(0, 1 - session.t / limit);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.fillRect(CX - 120, 68, 240, 4);
+  ctx.fillStyle = left > 0.25 ? 'rgba(242, 235, 226, 0.7)' : '#ff9a7a';
+  ctx.fillRect(CX - 120, 68, 240 * left, 4);
+
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 20px system-ui, sans-serif';
+  ctx.fillStyle = '#9be37a';
+  ctx.fillText(`✓ ${session.successes} / ${session.attempts}`, W.width - 40, 36);
+  if (session.streak > 1) {
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.fillStyle = '#ffd84a';
+    ctx.fillText(`streak ${session.streak}`, W.width - 40, 58);
+  }
+
+  const r = session.result;
+  if (!r) return;
+  const a = Math.min(1, r.t / 0.12);
+  ctx.globalAlpha = a;
+  ctx.fillStyle = r.ok ? 'rgba(30, 60, 20, 0.55)' : 'rgba(60, 20, 16, 0.55)';
+  ctx.fillRect(0, viewH * 0.36, W.width, 110);
+  ctx.textAlign = 'center';
+  ctx.font = `bold ${44 + (1 - a) * 12}px system-ui, sans-serif`;
+  ctx.fillStyle = r.ok ? '#9be37a' : '#ff8a6e';
+  ctx.fillText(r.ok ? 'NICE!' : 'TRY AGAIN', CX, viewH * 0.36 + 56);
+  if (!r.ok) {
+    ctx.font = '17px system-ui, sans-serif';
+    ctx.fillStyle = '#f2ebe2';
+    ctx.fillText(r.reason, CX, viewH * 0.36 + 90);
+  }
+  ctx.globalAlpha = 1;
 }
 
 const CONTROLS = [
@@ -166,6 +309,7 @@ const CONTROLS = [
   ['…pushing into soft dirt', 'tunnel through'],
   ['Steer into a wall', 'wall slide (sticks) · tap to drop'],
   ['Release in the gold zone', 'PERFECT'],
+
 ];
 
 export function drawTitle(ctx, viewH, best) {
@@ -178,14 +322,14 @@ export function drawTitle(ctx, viewH, best) {
   ctx.fillStyle = '#f2ebe2';
   ctx.font = 'bold 54px system-ui, sans-serif';
   ctx.fillText('RABBIT HOLE', lx, y0);
-  ctx.font = '20px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(242, 235, 226, 0.85)';
-  ctx.fillText('Tap to drop', lx, y0 + 44);
   if (best.score > 0) {
     ctx.font = 'bold 16px system-ui, sans-serif';
     ctx.fillStyle = '#ffd84a';
-    ctx.fillText(`Best ${fmt(best.score)} · ${best.depth} m`, lx, y0 + 74);
+    ctx.fillText(`Best ${fmt(best.score)} · ${best.depth} m`, lx, y0 + 34);
   }
+  const btn = titleButtons(viewH);
+  drawButton(ctx, btn.endless, '▶  ENDLESS', true);
+  drawButton(ctx, btn.practice, '◎  PRACTICE', false);
 
   // Right: controls.
   const rx = W.width * 0.72;
@@ -206,7 +350,8 @@ export function drawTitle(ctx, viewH, best) {
   ctx.fillStyle = 'rgba(242, 235, 226, 0.45)';
   ctx.fillText('Chains: Drill · Parachute Snap · Soft Landing · Wall Burrow', rx, y + 14);
   ctx.fillText('Ricochet · Spear · Ear Catch · Pop-Up', rx, y + 32);
-  ctx.fillText('Keys: ← → steer · ↑ jump · Space ears · ↓ dive / burrow · X tap · M mute · R restart', rx, y + 54);
+  ctx.fillText('Keys: ← → steer · ↑ jump · Space ears · ↓ dive / burrow · X tap · M mute', rx, y + 54);
+  ctx.fillText('Enter: endless · P: practice · Esc: back · R: restart', rx, y + 72);
 }
 
 // Mute button (title and game-over screens), top-right.

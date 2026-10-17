@@ -87,6 +87,12 @@ export function createInput(canvas) {
   const has = (...codes) => codes.some((c) => keys.has(c));
 
   return {
+    // Forget every finger and queued event (after a menu tap starts play).
+    clear() {
+      for (const p of pointers.values()) p.kind = 'ignored';
+      queued.press = queued.down = queued.ears = queued.jump = queued.tap = false;
+      prevBoth = false;
+    },
     sample() {
       const all = [...pointers.values()];
       const steerTouches = all.filter((p) => p.kind === 'steer');

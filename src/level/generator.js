@@ -36,8 +36,10 @@ export function tierAt(y) {
 export class LevelGenerator {
   // forceChunk: section id to repeat (debug, ?chunk=id)
   // forceBand: 'narrow' | 'wide' | 'normal' to use every time (debug, ?band=narrow)
-  constructor(seed, forceChunk = null, forceBand = null) {
+  // fixed: practice drills build their own level; generate nothing, recycle nothing
+  constructor(seed, forceChunk = null, forceBand = null, { fixed = false } = {}) {
     this.forceBand = forceBand;
+    this.fixed = fixed;
     this.seed = seed;
     this.rng = createRng(seed);
     this.hazardRng = createRng(seed ^ 0x9e3779b9); // runtime randomness, kept off the layout RNG
@@ -58,12 +60,13 @@ export class LevelGenerator {
 
   update(dt, camera) {
     this.time += dt;
-    while (this.nextY < camera.y + camera.viewH + LV.spawnAhead) this.placeChunk();
+    while (!this.fixed && this.nextY < camera.y + camera.viewH + LV.spawnAhead) this.placeChunk();
 
     for (const t of this.thorns) {
       t.x = t.baseX + (t.dx ? t.dx * Math.sin((this.time / t.period) * Math.PI * 2 + t.phase) : 0);
     }
 
+    if (this.fixed) return;
     const top = camera.y - LV.despawnBehind;
     const keep = (o) => o.y + (o.h ?? o.r ?? 0) > top;
     this.thorns = this.thorns.filter(keep);

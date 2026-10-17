@@ -177,7 +177,7 @@ const LEDGE_COLORS = {
 };
 
 function drawLedge(ctx, l, time) {
-  const [body, top] = LEDGE_COLORS[l.kind];
+  const [body, top] = l.target ? ['#8a6a2a', '#ffd84a'] : LEDGE_COLORS[l.kind];
   const wob = l.kind === 'pad' ? Math.sin(time * 6) : 0;
   ctx.fillStyle = body;
   ctx.beginPath();
@@ -195,6 +195,19 @@ function drawLedge(ctx, l, time) {
 
   const len = l.x2 - l.x1;
   const dy = l.y2 - l.y1;
+  if (l.target) {
+    // Practice goal: a little flag.
+    const fx = l.x1 + len / 2;
+    const fy = l.y1 + dy / 2;
+    ctx.fillStyle = '#d8c9a8';
+    ctx.fillRect(fx - 1, fy - 34, 2, 34);
+    ctx.fillStyle = '#ffd84a';
+    ctx.beginPath();
+    ctx.moveTo(fx + 1, fy - 34);
+    ctx.lineTo(fx + 20 + Math.sin(time * 5) * 2, fy - 28);
+    ctx.lineTo(fx + 1, fy - 22);
+    ctx.fill();
+  }
   if (l.kind === 'spikes') {
     ctx.fillStyle = '#cfd3d6';
     ctx.beginPath();
