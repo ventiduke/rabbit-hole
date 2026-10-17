@@ -303,7 +303,7 @@ export function drawPracticeHud(ctx, viewH, session) {
 const CONTROLS = [
   ['Hold left / right', 'steer · run'],
   ['Swipe up', 'jump · wall jump'],
-  ['Tap both halves', 'ears on / off (glide + steer)'],
+  ['Swipe up in the air', 'ears on / off (glide + steer)'],
   ['Swipe down', 'dive (again: drill) · dig'],
   ['Tap', 'end a dive / slide · clean exit'],
   ['…pushing into soft dirt', 'tunnel through'],
@@ -350,7 +350,7 @@ export function drawTitle(ctx, viewH, best) {
   ctx.fillStyle = 'rgba(242, 235, 226, 0.45)';
   ctx.fillText('Chains: Drill · Parachute Snap · Soft Landing · Wall Burrow', rx, y + 14);
   ctx.fillText('Ricochet · Spear · Ear Catch · Pop-Up', rx, y + 32);
-  ctx.fillText('Keys: ← → steer · ↑ jump · Space ears · ↓ dive / burrow · X tap · M mute', rx, y + 54);
+  ctx.fillText('Keys: ← → steer · ↑ jump / ears · Space ears · ↓ dive / burrow · X tap · M mute', rx, y + 54);
   ctx.fillText('Enter: endless · P: practice · Esc: back · R: restart', rx, y + 72);
 }
 

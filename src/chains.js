@@ -55,10 +55,11 @@ export const CHAIN_EFFECTS = {
   },
 
   // Wall jump into a dive: a diagonal spear that keeps its sideways speed,
-  // skewers thorns, and smashes through soft blocks and fragile ledges.
+  // skewers thorns, and breaks through whatever a Drill could (not rock).
   spear(player) {
     const m = player.move;
     m.variant = 'spear';
+    m.charges = C.spear.pierce;
     m.dir = -player.lastJumpFrom || player.facing;
     player.vx = m.dir * Math.max(Math.abs(player.vx), C.spear.vx);
   },

@@ -74,7 +74,7 @@ Perfect releases function like fighting-game cancel windows: they are the main w
 
 **Decisions made while building M2:**
 - **Per-move timers** for now (§11 is still open). A **timing bar** above the rabbit shows hold progress, with the perfect window drawn in gold.
-- **Ears are a toggle** (playtest follow-up): tap both halves together, or press Space, to open them. Steer normally while gliding, and tap both again to close them. The two presses must land within 0.18 s of each other, so overlapping thumbs while switching steering direction don't trigger it. If you leave them open past 1.8 s, they close with a short recovery.
+- **Ears are a toggle on swipe up in the air** (playtest follow-up; this replaced the two-thumb tap). Swipe up (or press ↑ or Space) while falling, diving, or breaking out of a burrow to open them. Steer normally while gliding, and swipe up again to close them. Closing in the gold zone counts as a perfect release. On the ground, swipe up is still a jump, and on a wall it's still a wall jump. A swipe up just before you land with nothing else going on is a buffered jump, not ears. If you leave them open past 1.8 s, they close with a short recovery.
 - **Cancelling:** starting a move while another is held ends the current one, graded like a release. So cancelling inside the perfect window counts as perfect. On keyboard, holding ↓ and then pressing Space in the gold zone gives Parachute Snap.
 - **Perfect release:** gives a flash, particles, a "PERFECT" label, a haptic buzz and 0.6 s of momentum carry (sideways speed from Ears, fall speed from Dive). The chain link window also grows from 0.2 s to 0.35 s.
 - **Timeout:** shows "TOO LONG", followed by 0.45 s of recovery with no moves and no steering.
@@ -121,8 +121,8 @@ Rules of thumb:
 - **Parachute Snap:** stops the fall instantly. Its shockwave breaks **fragile ledges** (cracked, paler) within 320 u below and 6 columns either side.
 - **Soft Landing:** same sequence as Parachute Snap, but chosen when ground is within 160 u below. It cuts the fall to a safe speed, so the landing isn't hard.
 - **M6 chains:**
-  - **Ricochet** (wall jump → grab another wall during the flight): each one in a row adds 18% to the next wall jump, up to 4. Resets on landing.
-  - **Spear** (wall jump → dive during the flight): a diagonal dive that keeps its sideways speed, **skewers thorns** (+150, "SKEWER"), and smashes through soft blocks and fragile ledges. Dive into the far wall and it still becomes a Wall Burrow.
+  - **Ricochet** (wall jump → grab another wall during the flight): each one in a row adds 18% to the next wall jump's sideways speed, up to 4. Resets on landing. Its upward kick halves with each Ricochet and adds to the fall you already have instead of replacing it, so bouncing in a thin shaft can't hold you up. Spamming it sinks at about wall-slide speed (`chains.ricochet.liftDecay`).
+  - **Spear** (wall jump → dive during the flight): a diagonal dive that keeps its sideways speed, **skewers thorns** (+150, "SKEWER"), and breaks through whatever a Drill could on the way down (any ledge but a pad, any block but rock, up to 4: `chains.spear.pierce`), so it no longer hurts you on dirt you could have drilled. Sideways it cuts through soft blocks. Dive into the far dirt wall and it still becomes a Wall Burrow. Rock still stops it, and landing on rock at spear speed still hurts.
   - **Ear Catch** (ears → wall slide): a much slower and longer slide (55 u/s, 3 s).
   - **Pop-Up** (burrow → ears): pops you up out of the hole and floats you.
 - The HUD shows **CHAIN xN** while a chain is live, and the first use of each chain in a run shows **NEW!**. Points come in M5.
@@ -156,7 +156,7 @@ Rules of thumb:
 
 **As built (M4):**
 - **Health:** 3 HP and 1.3 s of blinking invulnerability after each hit. A hit also knocks you back, ends the current move and cancels momentum carry.
-- **Hard landings:** impacts above `hardLandingSpeed` (560 u/s) cost 1 HP. Baseline falling (340) is always safe. Releasing a Dive too late hurts unless you Drill (keep holding into the ledge) or Soft Landing.
+- **Hard landings:** impacts above `hardLandingSpeed` (560 u/s) cost 1 HP. Baseline falling (380) is always safe. Releasing a Dive too late hurts unless you Drill (keep holding into the ledge) or Soft Landing.
 - **Game over:** at 0 HP you see a minimal "Knocked out" screen with your depth. Tap to retry. The full game-over and high-score screens come in M5.
 
 ---
@@ -205,7 +205,7 @@ Rules of thumb:
 |---|---|
 | Hold left / right half of screen | Steer / run |
 | Swipe up (hold for full height) | Jump; on a wall, wall jump |
-| Tap both halves together | Ears on / off. While gliding, steer normally with one thumb. Closing them in the gold zone is a perfect release |
+| Swipe up in the air | Ears on / off. While gliding, steer normally with one thumb. Closing them in the gold zone is a perfect release |
 | Swipe down + hold | **In air:** Dive. **On the ground:** dig down. **Pushing into soft dirt:** tunnel sideways |
 | Steer into a wall in the air, or hit one fast | Wall slide (automatic) |
 | Tap (or steer away) while sliding | Drop off the wall (the slide sticks without holding) |
@@ -213,7 +213,7 @@ Rules of thumb:
 
 As built: a swipe is 24 CSS px within 0.22 s (`config.input`). A finger that swipes down holds Dive/Burrow, and a finger that swipes up holds the jump; either way it stops steering until it's lifted. Ears stay open while any steering finger is still down. (The earlier "swipe sideways to wall jump" gesture was removed.)
 
-Desktop fallback for testing: arrow keys / A-D to steer, W/Up = jump, Space = ears, S/Down = dive/burrow.
+Desktop fallback for testing: arrow keys / A-D to steer, W/Up = jump (ears in the air), Space = ears, S/Down = dive/burrow.
 
 Feedback for perfect releases: screen flash, particle burst, sound sting, and haptic buzz (`navigator.vibrate` where supported).
 
@@ -308,7 +308,7 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 | Baseline steer speed | slow |
 | Ears: fall speed multiplier / steer multiplier | ~0.3× fall, ~2.5× steer |
 | Dive: fall speed multiplier | ~2.5×, steer disabled |
-| Wall drag: fall speed multiplier | ~0.4× |
+| Wall drag: fall speed multiplier | ~0.43× (165 of 380 u/s after the second playtest; was 135 of 340) |
 | Max hold durations | ~0.8–1.5 s per move |
 | Perfect window | ~100–150 ms, placed late in the hold |
 | Chain link window (non-perfect transitions) | ~200 ms |

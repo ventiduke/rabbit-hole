@@ -22,7 +22,7 @@ export const CONFIG = {
     height: 26,
     startY: 40,
     gravity: 900,             // u/s^2
-    terminalVelocity: 340,    // u/s, baseline fall cap
+    terminalVelocity: 380,    // u/s, baseline fall cap
     overspeedFallDecel: 1400, // how fast vy above the current cap bleeds off
     carryFallDecel: 220,      // ...while momentum carry is active (after a perfect release)
     airSteerSpeed: 210,       // u/s, baseline drift (the world is 1000 wide)
@@ -61,7 +61,7 @@ export const CONFIG = {
     recoveryTime: 0.45,       // can't act after a move times out
 
     ears: {
-      maxHold: 1.8,           // sticky: open until you tap both halves again (or this runs out)
+      maxHold: 1.8,           // sticky: open until you swipe up again (or this runs out)
       perfect: [1.1, 1.35],
       fallSpeed: 100,         // ~0.3x terminal
       brake: 1700,            // how hard ears slow the fall
@@ -81,7 +81,7 @@ export const CONFIG = {
       perfect: [1.1, 1.35],
       minFallSpeed: -40,      // can grab once vy is above this (steering into the wall)
       autoGrabSpeed: 200,     // hitting a wall this fast grabs it with no steering (as does a wall jump's far wall)
-      fallSpeed: 135,         // ~0.4x terminal
+      fallSpeed: 165,         // ~0.43x terminal
       brake: 1800,
       jumpVx: 420,
       jumpVy: -200,
@@ -127,10 +127,12 @@ export const CONFIG = {
     ricochet: {
       boost: 0.18,            // each Ricochet in a row adds this much to the next wall jump
       maxStack: 4,
+      liftDecay: 0.5,         // ...but its upward kick is multiplied by this per Ricochet (no climbing thin shafts)
     },
     spear: {
       vx: 520,                // sideways speed of the diagonal dive
       skewer: 150,            // points per thorn skewered
+      pierce: 4,              // blocks / ledges it can break through on the way down (anything but rock)
     },
     earCatch: {
       maxHold: 3,
@@ -221,7 +223,6 @@ export const CONFIG = {
     swipeTime: 0.22,      // seconds after touch-down a swipe can still be detected
     swipeAxisBias: 1.2,   // dominant axis must be this much larger than the other
     tapTime: 0.22,        // a touch shorter than this (and not a swipe) is a tap
-    earsChord: 0.18,      // both halves pressed within this of each other = ears toggle
   },
 
   fx: {

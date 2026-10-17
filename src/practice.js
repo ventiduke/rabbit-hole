@@ -74,8 +74,8 @@ export const DRILLS = [
     },
   },
   {
-    id: 'softLanding', name: 'Soft Landing', tag: '↓ · ears near ground', bottom: 1000,
-    how: 'Dive, then TAP BOTH HALVES (ears) in the gold zone just above the ground',
+    id: 'softLanding', name: 'Soft Landing', tag: '↓ · ↑ near ground', bottom: 1000,
+    how: 'Dive, then SWIPE ↑ (ears) in the gold zone just above the ground',
     build(b) {
       b.player(489, 0);
       b.block(24, 760, 952, 60, 'rock');
@@ -87,8 +87,8 @@ export const DRILLS = [
     },
   },
   {
-    id: 'parachuteSnap', name: 'Parachute Snap', tag: '↓ · ears in gold', bottom: 1600,
-    how: 'Dive, then TAP BOTH HALVES (ears) in the gold zone, high above the ledges',
+    id: 'parachuteSnap', name: 'Parachute Snap', tag: '↓ · ↑ in gold', bottom: 1600,
+    how: 'Dive, then SWIPE ↑ (ears) in the gold zone, high above the ledges',
     build(b) {
       b.player(489, 0);
       for (const y of [1100, 1180, 1260]) b.ledge(250, y, 750, y, { kind: 'fragile' });
@@ -101,8 +101,8 @@ export const DRILLS = [
     },
   },
   {
-    id: 'popUp', name: 'Pop-Up', tag: 'dig · ears', bottom: 900,
-    how: 'Swipe ↓ to dig through the soft floor, then TAP BOTH HALVES as you break out',
+    id: 'popUp', name: 'Pop-Up', tag: 'dig · ↑', bottom: 900,
+    how: 'Swipe ↓ to dig through the soft floor, then SWIPE ↑ (ears) as you break out',
     build(b) {
       b.player(489, 200 - H - 1);
       b.block(300, 200, 400, 40, 'soft');
@@ -115,8 +115,8 @@ export const DRILLS = [
     },
   },
   {
-    id: 'earCatch', name: 'Ear Catch', tag: 'ears · into wall', bottom: 1400,
-    how: 'TAP BOTH HALVES (ears), then steer into the wall',
+    id: 'earCatch', name: 'Ear Catch', tag: '↑ · into wall', bottom: 1400,
+    how: 'SWIPE ↑ (ears), then steer into the wall',
     build(b) {
       b.shaft(250, 750);
       b.player(489, 0);

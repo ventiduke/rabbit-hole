@@ -161,14 +161,10 @@ export class Player {
       else if (this.grounded || this.touchWall) this.requestBurrow(world);
       else this.request('dive', world);
     }
-    // Ears toggle: tap both halves (or Space) to open, again to close.
-    if (input.earsPressed) {
-      if (this.move?.name === 'ears') this.endMove(world, 'release');
-      else this.request('ears', world);
-    }
-
-    // Jump: wall jump while dragging, otherwise a ground jump (buffered + coyote time).
+    // Swipe up: wall jump while dragging, a ground jump on the ground (buffered +
+    // coyote time), and ears on / off in the air. Space toggles ears too.
     if (input.jumpPressed) this.jumpBuffer = P.jumpBuffer;
+    let earsToggle = input.earsPressed;
     if (this.jumpBuffer > 0) {
       if (this.move?.name === 'wall') {
         this.jumpBuffer = 0;
@@ -176,7 +172,14 @@ export class Player {
       } else if (!this.move && (this.grounded || this.coyote > 0)) {
         this.jumpBuffer = 0;
         this.groundJump(world);
+      } else if (input.jumpPressed && this.earsFromSwipe(world)) {
+        this.jumpBuffer = 0;
+        earsToggle = true;
       }
+    }
+    if (earsToggle) {
+      if (this.move?.name === 'ears') this.endMove(world, 'release');
+      else this.request('ears', world);
     }
     if (this.jumping && (this.vy >= 0 || !input.jumpHeld)) {
       if (this.vy < 0) this.vy *= P.jumpCut; // let go early = shorter hop
@@ -186,6 +189,7 @@ export class Player {
     const m = this.move;
     if (!m) return;
     // Dive and burrow are one swipe; a tap ends them early (graded, for the gold zone).
+    // (Not ears: quick steering taps while gliding would close them.)
     if ((m.name === 'dive' || m.name === 'burrow') && input.tap) this.endMove(world, 'release');
     // Wall slides are sticky: you stay on until you jump (above), tap, or steer away.
     // Steering away has to be held briefly, so the finger that starts a swipe-up
@@ -194,6 +198,16 @@ export class Player {
       m.away = input.steer === -m.side ? (m.away ?? 0) + dt : 0;
       if (input.tap || m.away >= M.wall.awayDelay) this.endMove(world, 'release');
     }
+  }
+
+  // Does a swipe up in the air mean ears? Not while digging inside a hole, and
+  // not just before landing with nothing going on (that's a buffered jump).
+  earsFromSwipe(world) {
+    if (this.grounded) return false;
+    const m = this.move;
+    if (m && m.name !== 'ears' && m.name !== 'dive' && !(m.name === 'burrow' && m.broke)) return false;
+    if (!m && this.distanceToGround(world.level.world) < Math.max(0, this.vy) * P.jumpBuffer + 6) return false;
+    return true;
   }
 
   armDrill(world) {
@@ -382,7 +396,10 @@ export class Player {
   wallJump(side, perfect, world) {
     const boost = 1 + C.ricochet.boost * this.ricochet;
     this.vx = -side * (perfect ? M.wall.perfectJumpVx : M.wall.jumpVx) * boost;
-    this.vy = (perfect ? M.wall.perfectJumpVy : M.wall.jumpVy) * boost;
+    // A Ricochet's kick adds to the fall you already have (and gets weaker each
+    // time), so bouncing in a thin shaft can't hold you up forever.
+    const lift = (perfect ? M.wall.perfectJumpVy : M.wall.jumpVy) * boost * C.ricochet.liftDecay ** this.ricochet;
+    this.vy = this.ricochet > 0 ? Math.max(this.vy, 0) + lift : lift;
     this.facing = -side;
     this.jumpFlight = M.wall.jumpFlight;
     this.lastJumpFrom = side;
@@ -580,10 +597,28 @@ export class Player {
     if (ref.block && !wasGrounded && this.nudge(geo, hits)) return; // slip past a corner
     this.y = top - this.h;
 
-    if (ref.ledge?.kind === 'fragile' && this.move?.variant === 'spear') {
-      geo.removeLedge(ref.ledge); // the spear goes straight through
-      this.smashed = { x: ref.ledge.x1, y: top, w: ref.ledge.x2 - ref.ledge.x1, h: LEDGE_T };
-      return;
+    // A Spear goes straight down through anything a Drill could break.
+    const m = this.move;
+    if (m?.variant === 'spear' && m.charges > 0) {
+      const l = ref.ledge;
+      if (l && RULES.drill.ledge(l.kind)) {
+        m.charges--;
+        if (l.kind === 'fragile') geo.removeLedge(l);
+        else geo.carveLedge(l, this.x - 6, this.x + this.w + 6);
+        this.smashed = l.kind === 'fragile' ? { x: l.x1, y: top, w: l.x2 - l.x1, h: LEDGE_T } : { x: this.x - 6, y: top, w: this.w + 12, h: LEDGE_T };
+        return;
+      }
+      const b = ref.block;
+      if (b && RULES.drill.block(b.kind)) {
+        // Cut the hole wide enough for the sideways drift on the way through,
+        // so we don't clip its side (which would read as a wall).
+        m.charges--;
+        const drift = Math.abs(this.vx) * ((b.h + this.h) / Math.max(this.vy, 1)) * 1.2 + 4;
+        const x = this.vx < 0 ? this.x - drift : this.x - 4;
+        geo.carveBlock(b, { x, y: b.y - 1, w: this.w + 4 + drift, h: b.h + 2 });
+        this.smashed = { x, y: b.y, w: this.w + 4 + drift, h: Math.min(b.h, 60) };
+        return;
+      }
     }
     if (ref.ledge?.kind === 'pad') {
       this.vy = H.padBounce;
@@ -601,7 +636,8 @@ export class Player {
     this.vy = 0;
   }
 
-  // Spear: cut straight through soft blocks; anything else still stops it.
+  // Spear, sideways: cut straight through soft blocks. Dirt stops it here and
+  // becomes a Wall Burrow instead (afterCollide); rock just stops it.
   spearThrough(geo, hits) {
     for (const b of hits) {
       if (b.kind !== 'soft' || b.side) continue;

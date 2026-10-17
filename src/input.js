@@ -11,7 +11,6 @@ export function createInput(canvas) {
   const pointers = new Map();
   const keys = new Set();
   const queued = { press: false, down: false, ears: false, jump: false, tap: false };
-  let prevBoth = false;
 
   const sideOf = (clientX) => {
     const rect = canvas.getBoundingClientRect();
@@ -91,7 +90,6 @@ export function createInput(canvas) {
     clear() {
       for (const p of pointers.values()) p.kind = 'ignored';
       queued.press = queued.down = queued.ears = queued.jump = queued.tap = false;
-      prevBoth = false;
     },
     sample() {
       const all = [...pointers.values()];
@@ -100,21 +98,12 @@ export function createInput(canvas) {
       const tRight = steerTouches.some((p) => p.side === 'right');
       const left = tLeft || has('ArrowLeft', 'KeyA');
       const right = tRight || has('ArrowRight', 'KeyD');
-      const both = tLeft && tRight;
-      // Ears: both halves pressed together (a two-thumb tap). Overlapping thumbs
-      // while switching steering direction don't count: the two presses must
-      // land within earsChord of each other.
-      let chord = false;
-      if (both && !prevBoth) {
-        const newest = (side) => Math.max(...steerTouches.filter((p) => p.side === side).map((p) => p.t0));
-        chord = Math.abs(newest('left') - newest('right')) / 1000 <= I.earsChord;
-      }
 
       const frame = {
         left,
         right,
         steer: (right ? 1 : 0) - (left ? 1 : 0),
-        earsPressed: queued.ears || chord,
+        earsPressed: queued.ears, // Space (on touch, ears are a swipe up in the air)
         earsHeld: steerTouches.length > 0 || has('Space'),
         downPressed: queued.down,
         downHeld: all.some((p) => p.kind === 'down') || has('KeyS', 'ArrowDown'),
@@ -124,7 +113,6 @@ export function createInput(canvas) {
         pressed: queued.press,
         restart: has('KeyR'),
       };
-      prevBoth = both;
       queued.press = queued.down = queued.ears = queued.jump = queued.tap = false;
       return frame;
     },
