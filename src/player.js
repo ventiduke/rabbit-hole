@@ -54,6 +54,7 @@ export class Player {
     this.carry = 0;         // seconds of momentum carry left
     this.jumpFlight = 0;    // seconds a wall jump still counts as in flight
     this.lastJumpFrom = 0;  // wall side of the last wall jump
+    this.ricochet = 0;      // Ricochets in a row (boosts wall jumps)
     this.coyote = 0;        // seconds we can still ground-jump after leaving the ground
     this.jumpBuffer = 0;    // seconds a jump press waits for the ground
     this.jumping = false;   // rising from a ground jump (for variable height)
@@ -102,11 +103,15 @@ export class Player {
     this.handleInput(input, world, dt);
     if (this.move) {
       this.move.t += dt;
-      if (this.move.t >= this.move.maxHold) this.endMove(world, 'timeout');
+      // Swipe-started moves (dive, burrow) just run out; held / sticky ones time out with a stumble.
+      if (this.move.t >= this.move.maxHold) this.endMove(world, M[this.move.name].expires ? 'expire' : 'timeout');
+      // A burrow's clean-exit window passing ends it quietly.
+      else if (this.move.name === 'burrow' && this.move.broke && this.move.t > this.move.window[1] + 0.05) this.endMove(world, 'expire');
     }
 
     this.justLanded = 0;
     this.padBounced = false;
+    this.smashed = null;
     this.physics(dt, input, world);
     this.afterCollide(input, world);
     this.squash = Math.max(0, this.squash - dt * 5);
@@ -148,8 +153,11 @@ export class Player {
 
     // Starts first, so e.g. a swipe-down on a wall cancels the drag instead
     // of being read as "lifted the steering finger" (= let go of the wall).
+    // Swipe down: dive in the air, burrow on the ground or into a wall.
+    // Swiping again mid-dive arms a Drill for when you land.
     if (input.downPressed) {
-      if (this.grounded || this.touchWall) this.requestBurrow(world);
+      if (this.move?.name === 'dive') this.armDrill(world);
+      else if (this.grounded || this.touchWall) this.requestBurrow(world);
       else this.request('dive', world);
     }
     // Ears toggle: tap both halves (or Space) to open, again to close.
@@ -176,7 +184,8 @@ export class Player {
 
     const m = this.move;
     if (!m) return;
-    if ((m.name === 'dive' || m.name === 'burrow') && !input.downHeld) this.endMove(world, 'release');
+    // Dive and burrow are one swipe; a tap ends them early (graded, for the gold zone).
+    if ((m.name === 'dive' || m.name === 'burrow') && input.tap) this.endMove(world, 'release');
     // Wall slides are sticky: you stay on until you jump (above), tap, or steer away.
     // Steering away has to be held briefly, so the finger that starts a swipe-up
     // on the far half of the screen doesn't drop you before the jump registers.
@@ -186,12 +195,19 @@ export class Player {
     }
   }
 
+  armDrill(world) {
+    if (this.move.drillArmed) return;
+    this.move.drillArmed = true;
+    world.fx.text('DRILL READY', '#ffb347', 11);
+  }
+
   groundJump(world) {
     this.vy = -P.jumpSpeed;
     this.leaveGround();
     this.coyote = 0;
     this.jumping = true;
-    world.fx.puff(this, 5);
+    world.fx.burst(this.x + this.w / 2, this.y + this.h, { count: 5, color: '#c9b49c', speed: 90, life: 0.3, g: 200 });
+    world.fx.sfx('jump');
   }
 
   request(name, world) {
@@ -320,7 +336,10 @@ export class Player {
       ...opts,
     };
     if (name === 'wall') this.move.side = this.wallContact;
-    if (name === 'ears' || name === 'dive') this.jumping = false;
+    if (name === 'ears' || name === 'dive') {
+      this.jumping = false;
+      world.fx.sfx(name);
+    }
 
     const isNew = this.chains.onStart(linked, chain);
     if (chain) {
@@ -330,7 +349,7 @@ export class Player {
     }
   }
 
-  // reason: 'release' | 'jump' (wall only) | 'cancel' | 'context' | 'timeout'
+  // reason: 'release' | 'jump' (wall only) | 'cancel' | 'context' | 'expire' (ran out quietly) | 'timeout'
   endMove(world, reason) {
     const m = this.move;
     if (!m) return;
@@ -360,8 +379,9 @@ export class Player {
   }
 
   wallJump(side, perfect, world) {
-    this.vx = -side * (perfect ? M.wall.perfectJumpVx : M.wall.jumpVx);
-    this.vy = perfect ? M.wall.perfectJumpVy : M.wall.jumpVy;
+    const boost = 1 + C.ricochet.boost * this.ricochet;
+    this.vx = -side * (perfect ? M.wall.perfectJumpVx : M.wall.jumpVx) * boost;
+    this.vy = (perfect ? M.wall.perfectJumpVy : M.wall.jumpVy) * boost;
     this.facing = -side;
     this.jumpFlight = M.wall.jumpFlight;
     this.lastJumpFrom = side;
@@ -410,7 +430,8 @@ export class Player {
       decel = P.airSteerDecel;
     }
     const carrying = !this.grounded && (this.carry > 0 || this.jumpFlight > 0);
-    if (name === 'dive') decel = carrying ? P.momentumDrag : M.dive.vxDrag;
+    if (m?.variant === 'spear') decel = 0; // the spear keeps its line
+    else if (name === 'dive') decel = carrying ? P.momentumDrag : M.dive.vxDrag;
     else if (carrying && name !== 'ears') decel = P.momentumDrag;
 
     let rate;
@@ -440,7 +461,7 @@ export class Player {
       cap = M.dive.speed;
       gain = M.dive.accel;
     } else if (name === 'wall') {
-      cap = M.wall.fallSpeed;
+      cap = m.fallSpeed ?? M.wall.fallSpeed;
       brake = M.wall.brake;
     }
     if (this.grounded && this.ground.ledge) this.vy = 0; // riding a ledge
@@ -512,7 +533,8 @@ export class Player {
   stepX(dx, geo) {
     if (!dx) return;
     this.x += dx;
-    const hits = geo.blocksIn(this.x, this.y, this.w, this.h);
+    let hits = geo.blocksIn(this.x, this.y, this.w, this.h);
+    if (hits.length && this.move?.variant === 'spear') hits = this.spearThrough(geo, hits);
     if (!hits.length) return;
     this.x = dx > 0 ? Math.min(...hits.map((b) => b.x)) - this.w : Math.max(...hits.map((b) => b.x + b.w));
     this.vx = 0;
@@ -554,6 +576,11 @@ export class Player {
     if (ref.block && !wasGrounded && this.nudge(geo, hits)) return; // slip past a corner
     this.y = top - this.h;
 
+    if (ref.ledge?.kind === 'fragile' && this.move?.variant === 'spear') {
+      geo.removeLedge(ref.ledge); // the spear goes straight through
+      this.smashed = { x: ref.ledge.x1, y: top, w: ref.ledge.x2 - ref.ledge.x1, h: LEDGE_T };
+      return;
+    }
     if (ref.ledge?.kind === 'pad') {
       this.vy = H.padBounce;
       this.padBounced = true;
@@ -568,6 +595,16 @@ export class Player {
     this.ground = ref;
     this.grounded = true;
     this.vy = 0;
+  }
+
+  // Spear: cut straight through soft blocks; anything else still stops it.
+  spearThrough(geo, hits) {
+    for (const b of hits) {
+      if (b.kind !== 'soft' || b.side) continue;
+      geo.carveBlock(b, { x: b.x - 1, y: this.y - 3, w: b.w + 2, h: this.h + 6 });
+      this.smashed = { x: b.x, y: this.y, w: b.w, h: this.h };
+    }
+    return hits.filter((b) => b.kind !== 'soft' || b.side);
   }
 
   // Corner correction: if we only clip one block by a sliver at our side, shift instead.
@@ -694,7 +731,7 @@ export class Player {
     let drilled = false;
     if (this.grounded && m?.name === 'dive') {
       this.endMove(world, 'context');
-      if (input.downHeld) {
+      if (m.drillArmed) {
         this.requestBurrow(world);
         drilled = this.move?.variant === 'drill';
       }
@@ -732,5 +769,18 @@ export class Player {
     }
     if (this.grounded) this.softLanding = false;
     if (this.padBounced) world.fx.pad(this);
+    if (this.smashed) {
+      world.fx.debris(this.smashed);
+      world.score?.destroy(1);
+    }
+    if (this.grounded) this.ricochet = 0;
+
+    // Hint for anyone standing around on soft dirt.
+    const onSoft = this.grounded && this.ground?.block?.kind === 'soft' && !this.move;
+    this.softIdle = onSoft ? (this.softIdle ?? 0) + 1 / 60 : 0;
+    if (this.softIdle > P.digHintAfter) {
+      this.softIdle = -1.5; // then again every couple of seconds
+      world.fx.text('SWIPE ↓ TO DIG', '#e6c49a', 13);
+    }
   }
 }

@@ -76,6 +76,7 @@ export function createInput(canvas) {
     if (e.code === 'Space') queued.ears = true;
     if (e.code === 'KeyS' || e.code === 'ArrowDown') queued.down = true;
     if (e.code === 'KeyW' || e.code === 'ArrowUp') queued.jump = true;
+    if (e.code === 'KeyX' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') queued.tap = true; // keyboard "tap"
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', () => {

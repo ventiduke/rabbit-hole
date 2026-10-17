@@ -45,6 +45,7 @@ export const CONFIG = {
     jumpBuffer: 0.12,         // a jump pressed this early before landing still happens
     cornerNudge: 6,           // slide past a block corner overlapping by this much instead of catching on it
     wallDropPush: 30,         // letting go of a wall pushes you off it this fast
+    digHintAfter: 1.5,        // seconds standing on soft dirt before "swipe down to dig" shows
     maxHp: 3,
     invulnTime: 1.3,          // seconds of invulnerability after a hit
     hitBounce: -220,          // vy after taking a hit
@@ -68,6 +69,7 @@ export const CONFIG = {
       steerAccel: 1300,
     },
     dive: {
+      expires: true,          // one swipe: runs until you tap (graded) or it runs out (no stumble)
       maxHold: 1.2,
       perfect: [0.75, 0.9],
       speed: 850,             // ~2.5x terminal
@@ -89,6 +91,7 @@ export const CONFIG = {
       awayDelay: 0.25,        // steering away drops you after this long (longer than a swipe takes)
     },
     burrow: {
+      expires: true,          // one swipe: digs / tunnels on its own; tap as you break out for a clean exit
       maxHold: 1.4,
       digSpeed: 90,           // u/s down through ledges / soft blocks
       tunnelSpeed: 220,       // u/s sideways through soft blocks
@@ -119,6 +122,22 @@ export const CONFIG = {
     parachuteSnap: {
       shockwaveRange: 360,    // breaks fragile ledges this far below
       shockwaveWidth: 260,    // ...and this far either side
+    },
+    ricochet: {
+      boost: 0.18,            // each Ricochet in a row adds this much to the next wall jump
+      maxStack: 4,
+    },
+    spear: {
+      vx: 520,                // sideways speed of the diagonal dive
+      skewer: 150,            // points per thorn skewered
+    },
+    earCatch: {
+      maxHold: 3,
+      perfect: [2.1, 2.45],
+      fallSpeed: 55,          // much slower than a normal wall slide
+    },
+    popUp: {
+      speed: 340,             // upward pop when you open your ears out of a burrow
     },
     softLanding: {
       range: 160,             // ground must be within this distance below
@@ -154,7 +173,7 @@ export const CONFIG = {
       narrowShift: 140,             // ...centre wanders this far from the middle
       wideExtra: [500, 900],        // wide bands extend this far past one screen edge (or half each side)
       sideMin: 260,                 // off-screen side spaces at least this wide get content
-      sideCarrot: 0.45,             // chance side content is a carrot (else a ring)
+      sideCarrot: 0.45,             // chance side content is a carrot (else a row of gems)
       sideThorn: 0.5,               // x (0.3 + d): chance a thorn guards it
       defaultMinW: 600,             // sections need this much width unless they set minW
     },
@@ -233,10 +252,27 @@ export const CONFIG = {
     cleanEscape: 200,         // every rock of a rockfall missed you
     speedBurst: 50,
     carrot: 100,
+    gem: 300,
     maxMult: 8,
     multHold: 4,              // seconds after the last boost before the multiplier decays
     multDecay: 0.5,           // multiplier lost per second once decaying
     storageKey: 'rabbit-hole.best',
+  },
+
+  art: {
+    biomeLength: 700,     // meters per biome
+    biomeBlend: 120,      // meters spent blending into the next one
+    biomes: [
+      { name: 'Topsoil', air: [24, 17, 14], wall: [58, 38, 24], rock: [60, 44, 34] },
+      { name: 'Slate Caves', air: [13, 17, 24], wall: [44, 48, 60], rock: [44, 52, 66] },
+      { name: 'Mossy Hollows', air: [12, 21, 15], wall: [36, 54, 34], rock: [38, 62, 42] },
+      { name: 'Ember Depths', air: [26, 11, 9], wall: [70, 32, 20], rock: [86, 38, 24] },
+    ],
+  },
+
+  audio: {
+    volume: 0.6,
+    storageKey: 'rabbit-hole.muted',
   },
 
   ui: {

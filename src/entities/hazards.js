@@ -34,9 +34,21 @@ export function interactHazards(player, world) {
     fx.burst(cx, player.y + player.h, { count: 8, color: '#cfd3d6', speed: 140, life: 0.3, g: 300 });
   }
 
+  const spear = player.move?.variant === 'spear';
   for (const t of level.thorns) {
-    if (circleHitsBox(t, t.r, player)) player.hurt(world, t.x);
+    if (!circleHitsBox(t, t.r, player)) continue;
+    if (spear) {
+      // Skewered.
+      t.dead = true;
+      fx.burst(t.x, t.y, { count: 18, color: '#a3354b', speed: 200, life: 0.5, g: 300, size: 4 });
+      fx.text('SKEWER', '#ff9a4a', 12);
+      fx.sfx('skewer');
+      world.score?.bonus(CONFIG.chains.spear.skewer, 'SKEWER', '#ff9a4a');
+    } else {
+      player.hurt(world, t.x);
+    }
   }
+  level.thorns = level.thorns.filter((t) => !t.dead);
 
   // Down-rings: passing through downward boosts the fall; diving through is a speed burst.
   const prevC = player.prevY + player.h / 2;
@@ -49,6 +61,7 @@ export function interactHazards(player, world) {
       player.vy = M.dive.speed * H.ringDiveMult;
       player.carry = M.carryTime;
       fx.text('SPEED BURST', '#7fe0ff', 13);
+      fx.sfx('ring');
       world.score?.bonus(CONFIG.score.speedBurst, 'SPEED BURST', '#7fe0ff');
       fx.shake(3);
       fx.haptic(15);
@@ -62,11 +75,21 @@ export function interactHazards(player, world) {
     if (c.taken || !circleHitsBox(c, 12, player)) continue;
     c.taken = true;
     player.heal(H.carrotHeal);
+    fx.sfx('carrot');
     world.score?.bonus(CONFIG.score.carrot, 'CARROT', '#ff9a3c');
     fx.burst(c.x, c.y, { count: 14, color: '#ff9a3c', speed: 140, life: 0.5, g: 0 });
     fx.text(`+${H.carrotHeal} ♥`, '#ff9a3c', 14);
   }
   level.carrots = level.carrots.filter((c) => !c.taken);
+
+  for (const g of level.gems) {
+    if (g.taken || !circleHitsBox(g, 12, player)) continue;
+    g.taken = true;
+    fx.burst(g.x, g.y, { count: 10, color: '#8fe3ff', speed: 120, life: 0.4, g: 0 });
+    fx.sfx('gem');
+    world.score?.bonus(CONFIG.score.gem, 'GEM', '#8fe3ff');
+  }
+  level.gems = level.gems.filter((g) => !g.taken);
 }
 
 // ---------------------------------------------------------------- drawing
@@ -112,6 +135,28 @@ export function drawHazards(ctx, level) {
     ctx.fillStyle = '#a3354b';
     ctx.beginPath();
     ctx.arc(0, 0, th.r * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  for (const g of level.gems) {
+    const bob = Math.sin(t * 4 + g.x) * 2;
+    const glint = 0.5 + 0.5 * Math.sin(t * 6 + g.x * 0.1);
+    ctx.save();
+    ctx.translate(g.x, g.y + bob);
+    ctx.fillStyle = '#4fb8e6';
+    ctx.beginPath();
+    ctx.moveTo(0, -10);
+    ctx.lineTo(8, -2);
+    ctx.lineTo(0, 10);
+    ctx.lineTo(-8, -2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(220, 248, 255, ${0.5 + glint * 0.5})`;
+    ctx.beginPath();
+    ctx.moveTo(0, -10);
+    ctx.lineTo(4, -3);
+    ctx.lineTo(0, 0);
+    ctx.lineTo(-4, -3);
     ctx.fill();
     ctx.restore();
   }

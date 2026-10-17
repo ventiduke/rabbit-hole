@@ -21,3 +21,18 @@ body {
   touch-action: none;
   background: #1a110b;
 }
+
+/* Edge vignette as a composited overlay: drawing it on the canvas every frame
+   cost more than the rest of the scene on slow devices. */
+#stage {
+  position: relative;
+  line-height: 0;
+}
+
+#stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.45) 100%);
+}

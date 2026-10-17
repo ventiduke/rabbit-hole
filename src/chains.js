@@ -21,6 +21,10 @@ export const CHAINS = [
   { id: 'drill', points: 250, name: 'Drill', seq: ['dive', 'burrow'], context: 'onGround', effect: 'drill', color: '#ffb347' },
   { id: 'softLanding', points: 200, name: 'Soft Landing', seq: ['dive', 'ears'], perfect: true, context: 'nearGround', effect: 'softLanding', color: '#9be37a' },
   { id: 'parachuteSnap', points: 300, name: 'Parachute Snap', seq: ['dive', 'ears'], perfect: true, effect: 'parachuteSnap', color: '#ff7ab8' },
+  { id: 'ricochet', points: 250, name: 'Ricochet', seq: ['wallJump', 'wall'], effect: 'ricochet', color: '#c7a6ff' },
+  { id: 'spear', points: 300, name: 'Spear', seq: ['wallJump', 'dive'], effect: 'spear', color: '#ff9a4a' },
+  { id: 'earCatch', points: 200, name: 'Ear Catch', seq: ['ears', 'wall'], effect: 'earCatch', color: '#b8f0a0' },
+  { id: 'popUp', points: 200, name: 'Pop-Up', seq: ['burrow', 'ears'], effect: 'popUp', color: '#ffe27a' },
 ];
 
 // Effects run right after the chained move starts.
@@ -43,6 +47,33 @@ export const CHAIN_EFFECTS = {
     m.window = D.perfect;
     m.charges = Math.min(D.maxLayers, 1 + Math.floor(Math.max(0, speed - CONFIG.player.terminalVelocity) / D.speedPerLayer));
     player.vy = speed;
+  },
+
+  // Wall jump straight into another wall slide: each one in a row kicks harder.
+  ricochet(player) {
+    player.ricochet = Math.min(C.ricochet.maxStack, player.ricochet + 1);
+  },
+
+  // Wall jump into a dive: a diagonal spear that keeps its sideways speed,
+  // skewers thorns, and smashes through soft blocks and fragile ledges.
+  spear(player) {
+    const m = player.move;
+    m.variant = 'spear';
+    m.dir = -player.lastJumpFrom || player.facing;
+    player.vx = m.dir * Math.max(Math.abs(player.vx), C.spear.vx);
+  },
+
+  // Ears into a wall: a slow, long, controlled slide.
+  earCatch(player) {
+    const m = player.move;
+    m.maxHold = C.earCatch.maxHold;
+    m.window = C.earCatch.perfect;
+    m.fallSpeed = C.earCatch.fallSpeed;
+  },
+
+  // Burst out of a burrow and open your ears: pop up and float.
+  popUp(player) {
+    player.vy = -C.popUp.speed;
   },
 
   softLanding(player) {

@@ -10,8 +10,10 @@ import { updateRockfall } from './entities/rockfall.js';
 import { randomSeed } from './rng.js';
 import { Fx } from './fx.js';
 import { Score } from './score.js';
+import { Sound } from './audio.js';
 import { drawWorld } from './render.js';
-import { drawHud, drawDebug, drawTitle, drawTouchHints, drawGameOver, drawRotateHint } from './ui.js';
+import { biomeName } from './biomes.js';
+import { drawHud, drawDebug, drawTitle, drawTouchHints, drawGameOver, drawRotateHint, drawSpeaker, SPEAKER } from './ui.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -29,11 +31,14 @@ const player = new Player();
 const camera = new Camera();
 const fx = new Fx();
 const score = new Score();
+const sound = new Sound();
+fx.sound = sound;
 let level;
 let scene = 'title';  // 'title' | 'play' | 'over'
 let overTime = 0;
 let isBest = false;
 let runTime = 0;
+let banner = null;     // { text, t } biome name when you enter a new one
 let scale = 1;        // device pixels per world unit
 let portrait = false; // show the "turn sideways" hint
 
@@ -59,6 +64,26 @@ function resize() {
   camera.viewH = canvas.height / scale;
 }
 
+// Audio can only start from a user gesture. The speaker button (title and
+// game-over screens) or M toggles mute; that tap doesn't also start a run.
+let swallowPress = false;
+canvas.addEventListener('pointerdown', (e) => {
+  sound.unlock();
+  if (scene === 'play') return;
+  const rect = canvas.getBoundingClientRect();
+  const k = CONFIG.world.width / rect.width;
+  const x = (e.clientX - rect.left) * k;
+  const y = (e.clientY - rect.top) * k;
+  if (x > SPEAKER.x - 10 && y < SPEAKER.y + SPEAKER.size + 10) {
+    sound.toggleMute();
+    swallowPress = true;
+  }
+});
+window.addEventListener('keydown', (e) => {
+  sound.unlock();
+  if (e.code === 'KeyM') sound.toggleMute();
+});
+
 // On phones, the first tap goes fullscreen and tries to lock landscape
 // (works on Android Chrome; iOS ignores it and shows the hint instead).
 let triedLock = false;
@@ -81,13 +106,20 @@ function newRun() {
   camera.snapTo(player, level.world);
   level.update(0, camera);
   runTime = 0;
+  banner = null;
+  lastBiome = biomeName(player.y);
 }
+let lastBiome = '';
 
 let lastFrame = null; // latest input snapshot, for the touch hints
 
 function step(dt) {
   const frame = input.sample();
   lastFrame = frame;
+  if (swallowPress) {
+    frame.pressed = false;
+    swallowPress = false;
+  }
   if (scene === 'title') {
     if (frame.pressed) scene = 'play';
     return;
@@ -110,10 +142,17 @@ function step(dt) {
   score.update(dt, player, world);
   camera.update(dt, player, level.world);
   level.update(dt, camera);
+  const b = biomeName(player.y);
+  if (b !== lastBiome) {
+    lastBiome = b;
+    banner = { text: b.toUpperCase(), t: 0 };
+  }
+  if (banner) banner.t += dt;
   if (player.dead) {
     scene = 'over';
     overTime = 0;
     isBest = score.finish();
+    sound.play('gameOver');
   }
 }
 
@@ -140,12 +179,15 @@ function render(alpha, frameDt) {
     drawHud(ctx, {
       score, depthMeters, hp: player.hp, maxHp: CONFIG.player.maxHp,
       chainCount: chainLive ? player.chains.count : 0,
+      banner,
+      viewH: camera.viewH,
     });
   }
   if (debug) drawDebug(ctx, camera.viewH, { fps, seed: level.seed, tier: tierAt(player.y), state: player.state });
 
   if (scene === 'title') drawTitle(ctx, camera.viewH, score.best);
   else if (scene === 'over') drawGameOver(ctx, camera.viewH, { score, isBest, canRetry: overTime > CONFIG.ui.retryDelay, time: overTime });
+  if (scene !== 'play') drawSpeaker(ctx, sound.muted);
   else if (lastFrame) drawTouchHints(ctx, camera.viewH, Math.min(1, CONFIG.ui.hintSeconds - runTime), lastFrame);
   if (portrait) drawRotateHint(ctx, camera.viewH);
 }
@@ -176,7 +218,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('resize', resize);
 screen.orientation?.addEventListener?.('change', resize);
 
-window.__game = { player, camera, fx, score, get level() { return level; } };
+window.__game = { player, camera, fx, score, sound, get level() { return level; } };
 
 resize();
 newRun();

@@ -15,6 +15,7 @@
 //   ring(x, y)                   down-ring (diving through = speed burst)
 //   rockfall(x, y, w)            loose rocks under an overhang; drop when you pass beneath
 //   slot(x, y, kinds)            optional 'thorn' / 'carrot', filled by difficulty
+//   gem(x, y)                    points pickup (put them somewhere worth the detour)
 //
 //   diff   tier (0-3), unlocks with depth (config.difficulty.tierDepths)
 //   h      section height        weight  optional pick weight (default 1)
@@ -27,6 +28,7 @@ const thorn = (x, y, o = {}) => ({ type: 'thorn', x, y, ...o });
 const ring = (x, y) => ({ type: 'ring', x, y });
 const rockfall = (x, y, w) => ({ type: 'rockfall', x, y, w });
 const slot = (x, y, kinds) => ({ type: 'slot', x, y, kinds });
+const gem = (x, y) => ({ type: 'gem', x, y });
 
 export const CHUNKS = [
   // ---- Tier 0: long falls, ledges that send you left or right
@@ -101,6 +103,16 @@ export const CHUNKS = [
     thorn(0.5, 120, { dx: 0.22, period: 2.2 }), // hug the walls (wall slide) to get past
     thorn(0.5, 320, { dx: 0.22, period: 1.8 }),
     ledge(0.3, 470, 0.7, 470, { fragile: 0.6 }),
+  ] },
+
+  { id: 'secretRoom', diff: 1, minW: 450, h: 240, items: [
+    block(0.32, 0, 0.36, 28, 'soft'),    // a soft-walled room: dig in through the roof,
+    block(0.32, 28, 0.03, 150, 'soft'),  // tunnel in through a wall, dig out the floor
+    block(0.65, 28, 0.03, 150, 'soft'),
+    block(0.32, 178, 0.36, 28, 'soft'),
+    gem(0.43, 150), gem(0.5, 150), gem(0.57, 150),
+    slot(0.5, 110, ['carrot']),
+    ledge(0.04, 40, 0.28, 110),
   ] },
 
   // ---- Tier 2: rockfalls, thorn fields, soft walls

@@ -47,6 +47,7 @@ export class LevelGenerator {
     this.thorns = [];    // { x, y, baseX, dx, period, phase, r }
     this.rings = [];     // { x, y, w, h }
     this.carrots = [];   // { x, y }
+    this.gems = [];      // { x, y }
     this.rockZones = []; // { x, y, w, fired }
     this.rocks = [];     // { x, y, w, h, vy, delay, zone }
     this.warnings = [];  // rockfall telegraphs
@@ -68,6 +69,7 @@ export class LevelGenerator {
     this.thorns = this.thorns.filter(keep);
     this.rings = this.rings.filter(keep);
     this.carrots = this.carrots.filter(keep);
+    this.gems = this.gems.filter(keep);
     this.rockZones = this.rockZones.filter((z) => z.y + 600 > top);
     this.world.prune(top);
   }
@@ -151,6 +153,9 @@ export class LevelGenerator {
           this.rockZones.push({ x: mirrored ? X(it.x) - w : X(it.x), y, w, fired: false });
           break;
         }
+        case 'gem':
+          this.gems.push({ x: X(it.x), y });
+          break;
         case 'slot':
           this.fillSlot(it.kinds, X(it.x), y, d);
           break;
@@ -194,7 +199,7 @@ export class LevelGenerator {
       : { x1, y1: y + drop, x2, y2: y, kind: 'ledge' });
     const cx = (x1 + x2) / 2;
     if (rng.chance(B.sideCarrot)) this.carrots.push({ x: cx, y: y - 40 });
-    else this.addRing(cx, y - 120);
+    else for (let i = -1; i <= 1; i++) this.gems.push({ x: cx + i * 34, y: y - 40 });
     if (rng.chance(B.sideThorn * (0.3 + d))) this.addThorn(cx, y - 160, w * 0.2, 2.2, d);
   }
 

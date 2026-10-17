@@ -84,6 +84,7 @@ function fire(z, level, fx) {
   level.warnings.push({ x: z.x + z.w / 2, y: z.y, age: 0, life: R.warn + count * R.stagger });
   fx.shake(3);
   fx.haptic(30);
+  fx.sfx('rumble');
 }
 
 // ---------------------------------------------------------------- drawing

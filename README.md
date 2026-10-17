@@ -10,6 +10,13 @@ Built as a static web game, deployed via **GitHub Pages**, played in a phone bro
 
 - **Done:** M0 (scaffold, loop, FPS), M1 (falling, steering, ledges, camera), M2 (the four moves), M3 (Drill, Parachute Snap, Soft Landing, Wall Burrow), M4 (endless chunk-based level, hazards, health) and M5 (scoring, combo multiplier, high score, start and game-over screens).
 - **Open-cavern landscape redesign (after the tunnel playtest):** the game is now landscape. It's a wide, open cavern with long stretches of falling, broken up by long sloped ledges that catch you and slide you left or right, then launch you off their end. Occasional blocks (pillars, overhangs, soft walls) give the wall and burrow moves something to work with. The tile tunnels were too cramped. See §5–§8.
+- **M6 (polish):**
+  - Four more chains: Ricochet, Spear, Ear Catch and Pop-Up.
+  - Synthesised sound, with a mute button and M key.
+  - Depth biomes with name banners.
+  - Gems and secret rooms.
+  - A rabbit art pass, a vignette, and a performance pass: 60 fps at 6× CPU throttle in headless Chromium.
+  - From the playtest: **dive is now a single swipe**, not a hold.
 - **Playtest follow-ups:**
   - Wall slides are sticky.
   - The cavern's width now varies: thin shafts, and wide stretches that run past the screen edge with a panning camera (§5, §7).
@@ -52,6 +59,12 @@ START → HOLD (limited duration) → RELEASE
 ```
 
 Perfect releases function like fighting-game cancel windows: they are the main way a chain continues cleanly.
+
+**Swipe moves (playtest follow-up):**
+- **Dive** starts with a single swipe down; there's nothing to hold. A **tap** ends it early, graded for the gold zone. Otherwise it simply runs out with no "TOO LONG" stumble.
+- **Drill:** swiping down again mid-dive arms one ("DRILL READY"), so you drill when you land. Without it, hitting the ground mid-dive is a hard landing.
+- **Burrows** (dig, tunnel) are single swipes too. They run on their own, and a tap just as you break out gives the clean-exit burst. Standing on soft dirt for 1.5 s shows "SWIPE ↓ TO DIG".
+- On keyboard, X (or Shift) is the tap.
 
 **Decisions made while building M2:**
 - **Per-move timers** for now (§11 is still open). A **timing bar** above the rabbit shows hold progress, with the perfect window drawn in gold.
@@ -101,6 +114,11 @@ Rules of thumb:
 - **Drill:** punches down through tile rows, hard dirt included: 1 row + 1 per 120 u/s of impact speed above terminal velocity, up to 6. Rock stops it, a pad bounces it, and its own landing never hurts.
 - **Parachute Snap:** stops the fall instantly. Its shockwave breaks **fragile ledges** (cracked, paler) within 320 u below and 6 columns either side.
 - **Soft Landing:** same sequence as Parachute Snap, but chosen when ground is within 160 u below. It cuts the fall to a safe speed, so the landing isn't hard.
+- **M6 chains:**
+  - **Ricochet** (wall jump → grab another wall during the flight): each one in a row adds 18% to the next wall jump, up to 4. Resets on landing.
+  - **Spear** (wall jump → dive during the flight): a diagonal dive that keeps its sideways speed, **skewers thorns** (+150, "SKEWER"), and smashes through soft blocks and fragile ledges. Dive into the far wall and it still becomes a Wall Burrow.
+  - **Ear Catch** (ears → wall slide): a much slower and longer slide (55 u/s, 3 s).
+  - **Pop-Up** (burrow → ears): pops you up out of the hole and floats you.
 - The HUD shows **CHAIN xN** while a chain is live, and the first use of each chain in a run shows **NEW!**. Points come in M5.
 
 ---
@@ -167,6 +185,7 @@ Rules of thumb:
   - **Wide:** extends 500–900 u past one screen edge, or half past each. The camera pans to follow you and stops where the wall comes into view, so you can see there's more out there. The normal-width section sits somewhere in the band, and the off-screen side space gets a ledge sloping back toward the middle with a carrot or ring on it, sometimes guarded by a thorn.
   - After a normal band, the next is normal, narrow or wide by weight. Narrow and wide always return to normal, and the first 2400 u are always normal.
 - **Rockfalls** are loose rocks hanging under an overhang. Pass beneath and they drop in a staggered burst with a blinking "▼ ! ▼" warning. They smash fragile ledges and shatter on anything else.
+- **Gems** (blue): +300 × combo. They're in **secret rooms**: a soft-walled box you dig into from the roof, tunnel into through a wall, or dig out of through the floor. They also appear off-screen in wide caverns.
 - **Entities:** thorn balls (still or patrolling, faster deeper down), down-rings (diving through one is a **SPEED BURST**) and carrots (+1 HP, rare).
 - **Safety nets:** you're popped out if you ever end up inside a block, and clipping a block corner by up to 6 u slides you past it.
 
@@ -219,6 +238,12 @@ Feedback for perfect releases: screen flash, particle burst, sound sting, and ha
 ## 8. Camera & presentation
 
 - Portrait, the rabbit sits in the **upper third** of the screen so the player sees what's coming.
+- *As built (M6 art pass):*
+  - **Depth biomes** change the cavern's colours every 700 m, cycling Topsoil → Slate Caves → Mossy Hollows → Ember Depths, with a name banner as you enter each one (`config.art`).
+  - The rabbit has a tail, nose, outline and belly shading.
+  - The edge vignette is a CSS overlay (`#stage::after`). Drawing it on the canvas every frame was the single biggest cost on slow devices.
+- **Sound** (`src/audio.js`): every effect is synthesised with WebAudio, so there are no asset files. That covers jump, landings, dive, ears, dig, smash, perfect, chain arpeggio, hurt, pad, ring, carrot, gem, rumble, skewer and game over. The speaker button (title and game-over screens) or M mutes, and mute is remembered.
+- **Performance check:** in headless Chromium with the CPU throttled 4× and 6× (standing in for mid-range phones), the game holds 60 fps once the vignette moved to CSS. Before that it ran at about 17–27 fps. Pixel density is capped at 3.
 - *As built:* **landscape**. The whole 1000-unit cavern width always fits the screen, and the aspect ratio is clamped to 1.45–2.3, letterboxed outside that. The rabbit sits 30% down the screen. Holding the phone upright shows "Turn your phone sideways", and on Android the first tap tries fullscreen plus a landscape lock. Parallax rock shapes and dust drift past behind the cavern to sell the speed of the fall.
 - Camera pulls further ahead as fall speed increases (critical during Dive).
 - Smooth follow on horizontal sections.

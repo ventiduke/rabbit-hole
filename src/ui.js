@@ -7,7 +7,7 @@ const W = CONFIG.world;
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const CX = W.width / 2;
 
-export function drawHud(ctx, { score, depthMeters, hp, maxHp, chainCount }) {
+export function drawHud(ctx, { score, depthMeters, hp, maxHp, chainCount, banner, viewH }) {
   const t = W.wallThickness;
 
   for (let i = 0; i < maxHp; i++) drawHeart(ctx, t + 16 + i * 20, 24, i < hp);
@@ -44,6 +44,23 @@ export function drawHud(ctx, { score, depthMeters, hp, maxHp, chainCount }) {
     ctx.fillRect(CX - 24, 55, 48, 3);
     ctx.fillStyle = decaying ? '#ff9a7a' : '#ffd84a';
     ctx.fillRect(CX - 24, 55, 48 * Math.max(0, left), 3);
+  }
+
+  // Entering a new biome.
+  if (banner && banner.t < 3) {
+    const a = banner.t < 0.4 ? banner.t / 0.4 : banner.t > 2.2 ? (3 - banner.t) / 0.8 : 1;
+    ctx.globalAlpha = a;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 30px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    const by = viewH * 0.66; // below the rabbit
+    ctx.fillText(banner.text, CX + 2, by + 2);
+    ctx.fillStyle = '#f2ebe2';
+    ctx.fillText(banner.text, CX, by);
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(242, 235, 226, 0.7)';
+    ctx.fillText(`${depthMeters} m`, CX, by + 22);
+    ctx.globalAlpha = 1;
   }
 
   // Recent bonuses under the score.
@@ -144,7 +161,8 @@ const CONTROLS = [
   ['Hold left / right', 'steer · run'],
   ['Swipe up', 'jump · wall jump'],
   ['Tap both halves', 'ears on / off (glide + steer)'],
-  ['Swipe down + hold', 'dive · dig down'],
+  ['Swipe down', 'dive (again: drill) · dig'],
+  ['Tap', 'end a dive / slide · clean exit'],
   ['…pushing into soft dirt', 'tunnel through'],
   ['Steer into a wall', 'wall slide (sticks) · tap to drop'],
   ['Release in the gold zone', 'PERFECT'],
@@ -187,7 +205,40 @@ export function drawTitle(ctx, viewH, best) {
   ctx.font = '13px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(242, 235, 226, 0.45)';
   ctx.fillText('Chains: Drill · Parachute Snap · Soft Landing · Wall Burrow', rx, y + 14);
-  ctx.fillText('Keys: ← → steer · ↑ jump · Space ears on/off · ↓ dive / burrow · R restart', rx, y + 36);
+  ctx.fillText('Ricochet · Spear · Ear Catch · Pop-Up', rx, y + 32);
+  ctx.fillText('Keys: ← → steer · ↑ jump · Space ears · ↓ dive / burrow · X tap · M mute · R restart', rx, y + 54);
+}
+
+// Mute button (title and game-over screens), top-right.
+export const SPEAKER = { x: W.width - 70, y: 18, size: 40 };
+
+export function drawSpeaker(ctx, muted) {
+  const { x, y, size: s } = SPEAKER;
+  ctx.save();
+  ctx.fillStyle = 'rgba(242, 235, 226, 0.75)';
+  ctx.strokeStyle = 'rgba(242, 235, 226, 0.75)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + 4, y + s * 0.38);
+  ctx.lineTo(x + 12, y + s * 0.38);
+  ctx.lineTo(x + 22, y + s * 0.18);
+  ctx.lineTo(x + 22, y + s * 0.82);
+  ctx.lineTo(x + 12, y + s * 0.62);
+  ctx.lineTo(x + 4, y + s * 0.62);
+  ctx.fill();
+  ctx.beginPath();
+  if (muted) {
+    ctx.moveTo(x + 27, y + s * 0.35);
+    ctx.lineTo(x + 37, y + s * 0.65);
+    ctx.moveTo(x + 37, y + s * 0.35);
+    ctx.lineTo(x + 27, y + s * 0.65);
+  } else {
+    ctx.arc(x + 22, y + s / 2, 9, -0.8, 0.8);
+    ctx.moveTo(x + 22 + 15 * Math.cos(-0.8), y + s / 2 + 15 * Math.sin(-0.8));
+    ctx.arc(x + 22, y + s / 2, 15, -0.8, 0.8);
+  }
+  ctx.stroke();
+  ctx.restore();
 }
 
 // Shown over everything while the phone is held upright.

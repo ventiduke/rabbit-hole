@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import { drawHazards } from './entities/hazards.js';
 import { drawRocks, drawRockZones } from './entities/rockfall.js';
 import { WALL, LEDGE_T } from './level/world.js';
+import { biomeColors, rgb } from './biomes.js';
 
 const W = CONFIG.world;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -22,11 +23,11 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   const viewH = camera.viewH;
   const shake = fx.shakeOffset;
 
-  // Cavern air, darkening slowly with depth.
-  const k = Math.min(1, Math.max(0, camY / 30000));
-  ctx.fillStyle = `rgb(${lerp(24, 12, k)}, ${lerp(17, 10, k)}, ${lerp(14, 12, k)})`;
+  // Cavern air, tinted by the depth biome.
+  const biome = biomeColors(camY + viewH * 0.4);
+  ctx.fillStyle = rgb(biome.air);
   ctx.fillRect(0, 0, W.width, viewH);
-  drawParallax(ctx, camX, camY, viewH);
+  drawParallax(ctx, camX, camY, viewH, biome);
 
   ctx.save();
   ctx.translate(-camX + shake.x, -camY + shake.y);
@@ -51,7 +52,7 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   for (const l of geo.ledges) {
     if (Math.max(l.y1, l.y2) + LEDGE_T >= camY && Math.min(l.y1, l.y2) - 10 <= camY + viewH) drawLedge(ctx, l, level.time);
   }
-  drawWalls(ctx, geo, camX, camY, viewH);
+  drawWalls(ctx, geo, camX, camY, viewH, biome);
   drawHazards(ctx, level);
 
   const blink = player.invuln > 0 && !player.dead && Math.floor(player.invuln * 12) % 2 === 0;
@@ -63,15 +64,16 @@ export function drawWorld(ctx, { camera, player, level, fx, alpha }) {
   const px = lerp(player.prevX, player.x, alpha) + player.w / 2;
   const py = lerp(player.prevY, player.y, alpha);
   drawTimingBar(ctx, player, px, py, camX + WALL, camX + W.width - WALL);
-  fx.drawLabels(ctx, px, py, camX + WALL + 4, camX + W.width - WALL - 4);
+  fx.drawLabels(ctx, px, py, camX + WALL + 4, camX + W.width - WALL - 4, camY + 100);
   ctx.restore();
+  // (The edge vignette is a CSS overlay: see #stage::after in style.css.)
 }
 
 // Distant rock shapes and dust drifting past at different speeds: the sense of falling.
-function drawParallax(ctx, camX, camY, viewH) {
+function drawParallax(ctx, camX, camY, viewH, biome) {
   const layers = [
-    { f: 0.25, band: 340, color: 'rgba(60, 44, 34, 0.35)', size: 120 },
-    { f: 0.5, band: 260, color: 'rgba(70, 52, 40, 0.35)', size: 70 },
+    { f: 0.25, band: 340, color: rgb(biome.rock, 0.35), size: 120 },
+    { f: 0.5, band: 260, color: rgb(biome.rock.map((v) => v + 10), 0.35), size: 70 },
   ];
   for (const L of layers) {
     const off = camY * L.f;
@@ -108,12 +110,12 @@ function drawParallax(ctx, camX, camY, viewH) {
 
 // Solid earth beyond the cavern walls, with a jagged edge that follows the
 // cavern's width profile.
-function drawWalls(ctx, geo, camX, camY, viewH) {
+function drawWalls(ctx, geo, camX, camY, viewH, biome) {
   const seg = 40;
   const i0 = Math.floor(camY / seg) - 1;
   const i1 = Math.ceil((camY + viewH) / seg) + 1;
   for (const side of [-1, 1]) {
-    ctx.fillStyle = '#3a2618';
+    ctx.fillStyle = rgb(biome.wall);
     ctx.beginPath();
     const base = side < 0 ? camX - 40 : camX + W.width + 40;
     ctx.moveTo(base, i0 * seg);
@@ -126,7 +128,7 @@ function drawWalls(ctx, geo, camX, camY, viewH) {
     ctx.lineTo(base, i1 * seg);
     ctx.fill();
     // A lighter rim on the cavern edge.
-    ctx.strokeStyle = 'rgba(120, 88, 60, 0.5)';
+    ctx.strokeStyle = rgb(biome.wall.map((v) => v + 50), 0.5);
     ctx.lineWidth = 2;
     ctx.beginPath();
     for (let i = i0; i <= i1; i++) {
@@ -237,7 +239,8 @@ function drawRabbit(ctx, p, alpha) {
   let h = p.h;
   let ears = 'up';
   if (state === 'ears') ears = 'out';
-  if (state === 'dive' || state === 'drill' || state === 'dig' || state === 'burrow') {
+  if (state === 'spear') ctx.rotate(-p.move.dir * 0.75); // head-first along the diagonal
+  if (state === 'dive' || state === 'drill' || state === 'dig' || state === 'burrow' || state === 'spear') {
     ears = 'down';
     w *= 0.75;
     h *= 1.15;
@@ -295,20 +298,35 @@ function drawRabbit(ctx, p, alpha) {
     ctx.fillRect(1, h / 2 - 2, 3, 12);
   }
 
-  // Body.
+  // Tail puff behind, then the body with a dark outline (reads on any background).
+  if (ears !== 'down') {
+    ctx.fillStyle = fur;
+    ctx.beginPath();
+    ctx.arc(-p.facing * (w / 2), h * 0.18, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.fillStyle = fur;
   roundRect(ctx, -w / 2, -h / 2, w, h, Math.min(7, w / 2));
   ctx.fill();
+  ctx.strokeStyle = 'rgba(30, 18, 10, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(190, 172, 152, 0.55)'; // belly shade
+  ctx.fillRect(-w / 2 + 3, h / 2 - 6, w - 6, 3.5);
 
   // Eye: on the facing side, or near the bottom when head-down.
   ctx.fillStyle = '#2a1a10';
   if (ears === 'down') ctx.fillRect(-1.5, h / 2 - 8, 3, 3);
-  else ctx.fillRect(p.facing * w * 0.2 - 1.5, -h / 2 + 7, 3, 3);
+  else {
+    ctx.fillRect(p.facing * w * 0.2 - 1.5, -h / 2 + 7, 3, 3);
+    ctx.fillStyle = '#e98a9a'; // nose
+    ctx.fillRect(p.facing * (w / 2 - 3) - 1, -h / 2 + 11, 2.5, 2);
+  }
 
   ctx.restore();
 
   // Speed lines while diving.
-  if (state === 'dive' || state === 'drill') {
+  if (state === 'dive' || state === 'drill' || state === 'spear') {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
     ctx.lineWidth = 1;
     ctx.beginPath();

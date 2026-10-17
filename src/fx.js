@@ -8,7 +8,12 @@ const F = CONFIG.fx;
 
 export class Fx {
   constructor() {
+    this.sound = null; // set by main.js (audio.js); every event below also plays a sound
     this.reset();
+  }
+
+  sfx(name, level) {
+    this.sound?.play(name, level);
   }
 
   reset() {
@@ -70,6 +75,7 @@ export class Fx {
   // ------------------------------------------------------------ game events
 
   perfect(player) {
+    this.sfx('perfect');
     const cx = player.x + player.w / 2;
     const cy = player.y + player.h / 2;
     this.burst(cx, cy, { count: 16, color: '#ffd84a', speed: 180, life: 0.45, g: 0 });
@@ -79,6 +85,7 @@ export class Fx {
   }
 
   chain(player, chain, isNew, count) {
+    this.sfx('chain', count);
     const cx = player.x + player.w / 2;
     const cy = player.y + player.h / 2;
     this.burst(cx, cy, { count: 26, color: chain.color, speed: 240, life: 0.6, g: 0, size: 4 });
@@ -90,17 +97,20 @@ export class Fx {
   }
 
   timeout(player) {
+    this.sfx('timeout');
     this.text('TOO LONG', '#b9a99a', 11);
     this.burst(player.x + player.w / 2, player.y, { count: 6, color: '#b9a99a', speed: 60, life: 0.6, g: 0 });
   }
 
   hardLanding(player) {
+    this.sfx('hardLanding');
     this.text('HARD LANDING', '#ff6b5a', 12);
     this.puff(player, 14);
     this.shake(F.hardLandingShake);
   }
 
   hurt(player) {
+    this.sfx('hurt');
     this.text(player.hp > 0 ? 'OUCH' : 'KO', '#ff6b5a', 15);
     this.burst(player.x + player.w / 2, player.y + player.h / 2, { count: 14, color: '#ff6b5a', speed: 160, life: 0.4, g: 0 });
     this.shake(F.hitShake);
@@ -109,31 +119,37 @@ export class Fx {
   }
 
   pad(player) {
+    this.sfx('pad');
     this.burst(player.x + player.w / 2, player.y + player.h, { count: 10, color: '#ffd1e3', speed: 130, life: 0.35, g: 300 });
     this.haptic(10);
   }
 
   puff(player, count) {
     if (count <= 0) return;
+    this.sfx('land', count / 14);
     this.burst(player.x + player.w / 2, player.y + player.h, { count, color: '#c9b49c', speed: 90, life: 0.4, g: 200, dir: -Math.PI / 2, spread: Math.PI * 0.9 });
   }
 
   wallKick(player, side) {
+    this.sfx('wallJump');
     const x = side < 0 ? player.x : player.x + player.w;
     this.burst(x, player.y + player.h, { count: 8, color: '#c9b49c', speed: 110, life: 0.35, g: 200, dir: side < 0 ? 0 : Math.PI, spread: 1.2 });
   }
 
   // Tried to burrow into something too hard.
   clunk(player) {
+    this.sfx('clunk');
     this.burst(player.x + player.w / 2, player.y + player.h, { count: 6, color: '#9a9a9a', speed: 90, life: 0.25, g: 300 });
     this.text('TOO HARD', '#b9a99a', 10);
   }
 
   dirt(x, y, count) {
+    this.sfx('dig');
     this.burst(x, y, { count, color: '#8a6440', speed: 120, life: 0.5, g: 500, size: 3 });
   }
 
   debris(ledge) {
+    this.sfx('smash');
     for (let i = 0; i < ledge.w / 8; i++) {
       this.particles.push({
         x: ledge.x + Math.random() * ledge.w, y: ledge.y + Math.random() * ledge.h,
@@ -173,7 +189,7 @@ export class Fx {
 
   // Labels stack above the rabbit and drift up as they fade.
   // minX/maxX keep labels on screen near the walls.
-  drawLabels(ctx, px, top, minX, maxX) {
+  drawLabels(ctx, px, top, minX, maxX, minY = -Infinity) {
     ctx.textAlign = 'center';
     this.texts.forEach((t, i) => {
       const k = t.age / t.life;
@@ -182,7 +198,7 @@ export class Fx {
       const half = ctx.measureText(t.str).width / 2;
       const cx = Math.max(minX + half, Math.min(maxX - half, px));
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      const y = top - 34 - i * 18 - k * 24;
+      const y = Math.max(minY + i * 18, top - 34 - i * 18 - k * 24); // never up into the HUD
       ctx.fillText(t.str, cx + 1, y + 1);
       ctx.fillStyle = t.color;
       ctx.fillText(t.str, cx, y);
